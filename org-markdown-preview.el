@@ -200,21 +200,19 @@ Th file name based on the local value of `org-markdown-preview-preview-buffer'."
                            (delete ws org-markdown-preview-websockets))))))
 
 (defun org-markdown-preview-init ()
-	"Initialize org markdown preview mode."
-  (if (not (eq major-mode 'org-mode))
-      (message "Not in org mode")
-    (remove-hook 'after-save-hook
-                 'org-markdown-preview-websocket-send-html
-                 'local)
-    (add-hook 'after-save-hook
-              'org-markdown-preview-websocket-send-html
-              nil 'local)
-    (setq org-markdown-preview-preview-buffer (current-buffer))
-    (unless org-markdown-preview-websocket-server
-      (org-markdown-preview-run-socket))
-    (unless (process-status "httpd")
-      (httpd-start))
-    (save-window-excursion (org-markdown-preview-browse-preview))))
+	"Initialize markdown preview mode."
+  (remove-hook 'after-save-hook
+               'org-markdown-preview-websocket-send-html
+               'local)
+  (add-hook 'after-save-hook
+            'org-markdown-preview-websocket-send-html
+            nil 'local)
+  (setq org-markdown-preview-preview-buffer (current-buffer))
+  (unless org-markdown-preview-websocket-server
+    (org-markdown-preview-run-socket))
+  (unless (process-status "httpd")
+    (httpd-start))
+  (org-markdown-preview-browse-preview))
 
 ;;;###autoload
 (define-minor-mode org-markdown-preview-mode
