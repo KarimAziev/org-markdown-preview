@@ -86,13 +86,27 @@ Uses `browse-url' to launch a browser"
          (port (aref local-addr (1- (length local-addr))))
          (url (format "http://%s:%d/org-markdown-preview/preview"
                       host port)))
-    (browse-url url)))
+    (let* ((orig-wind (selected-window))
+           (wind-target (if (minibuffer-window-active-p orig-wind)
+                            (with-minibuffer-selected-window
+                              (let ((wind (selected-window)))
+                                (or
+                                 (window-right wind)
+                                 (window-left wind)
+                                 (split-window-right))))
+                          (let ((wind (selected-window)))
+                            (or
+                             (window-right wind)
+                             (window-left wind)
+                             (split-window-right))))))
+      (with-selected-window wind-target
+        (browse-url url)))))
 
 (defun org-markdown-preview-websocket-send-msg-to-client (type &optional
                                                                payload)
   "Notify all opened sockets with message TYPE and PAYLOAD."
   (setq org-markdown-preview-websockets
-        (seq-filter 'websocket-openp org-markdown-preview-websockets))
+        (seq-filter #'websocket-openp org-markdown-preview-websockets))
   (dolist (socket org-markdown-preview-websockets)
     (when (and socket type)
       (websocket-send-text
@@ -116,7 +130,7 @@ Uses `browse-url' to launch a browser"
       (insert string)
       (cons
        (eq 0
-           (apply 'call-process-region (append (list (point-min)
+           (apply #'call-process-region (append (list (point-min)
                                                      (point-max))
                                                args)))
        (buffer-string)))))
