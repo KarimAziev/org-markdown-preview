@@ -1,4 +1,4 @@
-;;; org-markdown-preview.el --- A minor mode for preview markdown in org mode -*- lexical-binding: t; -*-
+;;; org-markdown-preview.el --- A minor mode for preview markdown in org mode
 
 ;; Copyright (C) 2022 Karim Aziiev <karim.aziiev@gmail.com>
 
@@ -36,7 +36,7 @@
 ;;      Write `org-markdown-preview-md-content' to the markdown file.
 ;;      Th file name based on the local value of `org-markdown-preview-preview-buffer'.
 
-;; M-x `org-markdown-preview-websocket-send-html'
+;; M-x `org-markdown-preview-current-buffer'
 ;;      Write org content to markdown file and refresh websocket clients.
 ;;      Org content is taken from `org-markdown-preview-preview-buffer'.
 
@@ -53,11 +53,23 @@
 
 (require 'websocket)
 (require 'simple-httpd)
+(require 'org)
+(require 'markdown-mode)
 
 (defvar org-markdown-preview-websockets nil)
 (defvar org-markdown-preview-websocket-server nil)
 (defvar org-markdown-preview-markdown-current-html nil)
-(defvar org-markdown-preview-data-root (file-name-directory load-file-name))
+
+(defvar org-markdown-preview-data-root (file-name-directory (if load-in-progress
+                                                                load-file-name
+                                                              (buffer-file-name))))
+
+(defcustom org-markdown-preview-edit-persistent-message t
+  "Whether to show persistent exit help while editing markdown in org buffer.
+The message is shown in the header-line, which will be created in the
+first line of the window showing the editing buffer."
+  :group 'org-markdown-preview
+  :type 'boolean)
 
 (defcustom org-markdown-preview-pandoc-output-type "gfm"
   "Markdown output type for `pandoc'."
@@ -69,6 +81,19 @@
                  (string :tag "original unextended Markdown" "markdown_strict")
                  (string :tag "Other"))
   :group 'org-markdown-preview)
+
+(defcustom org-markdown-preview-browse-url-function 'browse-url
+  "Function for opening preview."
+  :type 'function
+  :group 'org-markdown-preview)
+
+(defvar org-markdown-after-websockets-send-message-hook nil
+  "Hooks run after sending message to websocket client.")
+
+(defvar org-markdown-preview-source-buffer nil)
+(defvar org-markdown-preview-org-buffer nil)
+(defvar org-markdown-preview-md-buffer nil)
+(defvar org-markdown-preview-md-content nil)
 
 ;;;###autoload
 (defun org-markdown-preview-browse-preview ()
@@ -86,21 +111,14 @@ Uses `browse-url' to launch a browser"
          (port (aref local-addr (1- (length local-addr))))
          (url (format "http://%s:%d/org-markdown-preview/preview"
                       host port)))
-    (let* ((orig-wind (selected-window))
-           (wind-target (if (minibuffer-window-active-p orig-wind)
-                            (with-minibuffer-selected-window
-                              (let ((wind (selected-window)))
-                                (or
-                                 (window-right wind)
-                                 (window-left wind)
-                                 (split-window-right))))
-                          (let ((wind (selected-window)))
-                            (or
-                             (window-right wind)
-                             (window-left wind)
-                             (split-window-right))))))
-      (with-selected-window wind-target
-        (browse-url url)))))
+    (funcall org-markdown-preview-browse-url-function url)))
+
+(defvar org-markdown-preview-edit-buffer-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "C-c '") #'org-markdown-preview-markdown-write)
+    (define-key map (kbd "C-c C-k") #'kill-this-buffer)
+    (define-key map (kbd "C-x 0") #'kill-this-buffer)
+    map))
 
 (defun org-markdown-preview-websocket-send-msg-to-client (type &optional
                                                                payload)
@@ -109,14 +127,14 @@ Uses `browse-url' to launch a browser"
         (seq-filter #'websocket-openp org-markdown-preview-websockets))
   (dolist (socket org-markdown-preview-websockets)
     (when (and socket type)
+      (message "sending %s type" type)
       (websocket-send-text
        socket
        (json-encode
         `(("type" . ,type)
-          ("payload" . ,payload)))))))
+          ("payload" . ,payload))))
+      (run-hooks 'org-markdown-after-websockets-send-message-hook))))
 
-(defvar org-markdown-preview-preview-buffer nil)
-(defvar org-markdown-preview-md-content nil)
 (defun org-markdown-preview-pandoc-from-string (string input-type output-type
                                                        &rest options)
   "Execute `pandoc' on STRING in INPUT-TYPE to OUTPUT-TYPE additional OPTIONS."
@@ -128,58 +146,154 @@ Uses `browse-url' to launch a browser"
                options)))
     (with-temp-buffer
       (insert string)
-      (cons
-       (eq 0
-           (apply #'call-process-region (append (list (point-min)
-                                                     (point-max))
-                                               args)))
-       (buffer-string)))))
+      (if (eq 0
+              (apply #'call-process-region (append (list (point-min)
+                                                         (point-max))
+                                                   args)))
+          (buffer-string)
+        (error (buffer-string))))))
 
-;;;###autoload
-(defun org-markdown-preview-websocket-send-html ()
-	"Write org content to markdown file and refresh websocket clients.
-Org content is taken from `org-markdown-preview-preview-buffer'."
-  (interactive)
-  (let* ((content (with-current-buffer org-markdown-preview-preview-buffer
-                    (buffer-substring-no-properties (point-min) (point-max))))
-         (md-result (org-markdown-preview-pandoc-from-string
-                     content "org" org-markdown-preview-pandoc-output-type))
-         (html-result (when (car md-result)
-                        (org-markdown-preview-pandoc-from-string
-                         (cdr md-result)
-                         org-markdown-preview-pandoc-output-type
-                         "html5"))))
-    (setq org-markdown-preview-md-content (when (car md-result)
-                                            (cdr md-result)))
-    (setq org-markdown-preview-markdown-current-html
-          (when (and html-result
-                     (car html-result))
-            (cdr html-result)))
-    (if (null org-markdown-preview-markdown-current-html)
-        (message "Failed 1) %s 2) %s" (cdr md-result)
-                 (when html-result
-                   (cdr html-result)))
-      (org-markdown-preview-websocket-send-msg-to-client
-       "refresh"
-       org-markdown-preview-markdown-current-html)
-      (org-markdown-preview-markdown-write))))
+(defun org-markdown-preview-send-html ()
+  (when-let ((html (or org-markdown-preview-markdown-current-html
+                       (org-markdown-preview-get-html))))
+    (org-markdown-preview-websocket-send-msg-to-client
+     "refresh"
+     html)))
 
 ;;;###autoload
 (defun org-markdown-preview-markdown-write ()
   "Write `org-markdown-preview-md-content' to the markdown file.
-Th file name based on the local value of `org-markdown-preview-preview-buffer'."
+Th file name based on the local value of `org-markdown-preview-org-buffer'."
   (interactive)
-  (when (and org-markdown-preview-md-content
-             org-markdown-preview-preview-buffer
-             (buffer-local-value 'buffer-file-name
-                                 org-markdown-preview-preview-buffer))
-    (write-region org-markdown-preview-md-content nil
-                  (concat (file-name-sans-extension
-                           (buffer-local-value
-                            'buffer-file-name
-                            org-markdown-preview-preview-buffer))
-                          ".md")
-                  nil)))
+  (kill-buffer)
+  (write-region org-markdown-preview-md-content nil
+                (concat (file-name-sans-extension
+                         (or (buffer-local-value
+                              'buffer-file-name
+                              org-markdown-preview-org-buffer)
+                             (expand-file-name
+                              (replace-regexp-in-string
+                               "\\*" ""
+                               (buffer-name
+                                org-markdown-preview-org-buffer))
+                              default-directory)))
+                        ".md")
+                nil))
+
+;;;###autoload
+(defun org-markdown-preview-current-buffer ()
+	"Write org content to markdown file and refresh websocket clients.
+Org content is taken from `org-markdown-preview-org-buffer'."
+  (interactive)
+  (org-markdown-preview-setup-buffers)
+  (with-current-buffer org-markdown-preview-source-buffer
+    (setq org-markdown-preview-md-content nil)
+    (setq org-markdown-preview-markdown-current-html
+          (org-markdown-preview-get-html)))
+  (when org-markdown-preview-md-content
+    (pcase (buffer-local-value 'major-mode
+                               org-markdown-preview-source-buffer)
+      ((or 'org-mode 'outline-mode)
+       (pop-to-buffer-same-window
+        (with-current-buffer (get-buffer-create
+                              "*org-markdown-preview-md*")
+          (erase-buffer)
+          (goto-char (point-min))
+          (insert org-markdown-preview-md-content)
+          (set-buffer-modified-p nil)
+          (delay-mode-hooks
+            (pcase org-markdown-preview-pandoc-output-type
+              ((or "gfm" "markdown_mmd")
+               (gfm-mode))
+              (_ (markdown-mode))))
+          (use-local-map
+           (let ((map (copy-keymap org-markdown-preview-edit-buffer-map)))
+             (set-keymap-parent map (current-local-map))
+             map))
+          (when org-markdown-preview-edit-persistent-message
+            (setq header-line-format
+	                (substitute-command-keys
+	                 "Save with `\\[org-markdown-preview-markdown-write]' or abort with \
+`\\[kill-this-buffer]'")))
+          (current-buffer))))))
+  (org-markdown-preview-run)
+  (if org-markdown-preview-markdown-current-html
+      (org-markdown-preview-websocket-send-msg-to-client
+       "refresh"
+       org-markdown-preview-markdown-current-html)
+    (message "No html")))
+
+(defun org-markdown-preview-org-to-md (org-content)
+  "Transform ORG-CONTENT with pandoc to markdown.
+See `org-markdown-preview-pandoc-output-type'."
+  (org-markdown-preview-pandoc-from-string
+   org-content
+   "org"
+   org-markdown-preview-pandoc-output-type))
+
+(defun org-markdown-preview-md-to-org (md-content)
+  "Transform MD-CONTENT with pandoc to markdown.
+See `org-markdown-preview-pandoc-output-type'."
+  (org-markdown-preview-pandoc-from-string
+   md-content
+   org-markdown-preview-pandoc-output-type
+   "org"))
+
+(defun org-markdown-preview-md-to-html (md-content)
+  "Transform MD-CONTENT with pandoc to markdown.
+See `org-markdown-preview-pandoc-output-type'."
+  (org-markdown-preview-pandoc-from-string
+   md-content
+   org-markdown-preview-pandoc-output-type
+   "html5"))
+
+(defun org-markdown-preview-org-to-html (org-content)
+  "Transform ORG-CONTENT with pandoc to html5."
+  (setq org-markdown-preview-md-content
+        (org-markdown-preview-org-to-md org-content))
+  (org-markdown-preview-md-to-html
+   org-markdown-preview-md-content))
+
+(require 'dom)
+
+(defun org-markdown-preview-get-html ()
+  "Convert buffer contents to html with pandoc."
+  (when-let ((fn (pcase major-mode
+                   ('org-mode 'org-markdown-preview-org-to-html)
+                   ((or 'markdown-mode 'gfm-mode)
+                    'org-markdown-preview-md-to-html)
+                   ((or 'html 'web-mode)
+                    (lambda (html)
+                      (or (when-let* ((dom (with-temp-buffer (insert html)
+                                                             (libxml-parse-html-region
+                                                              (point-min) (point-max))))
+                                      (body (dom-by-tag
+                                             dom 'body))
+                                      (children (dom-children body)))
+                            (with-temp-buffer
+                              (dolist (child children)
+                                (when (listp child)
+                                  (dom-print child)))
+                              (buffer-string)))
+                          html))))))
+    (funcall fn (buffer-substring-no-properties (point-min) (point-max)))))
+
+;;;###autoload
+(defun org-markdown-preview-browse-md-content (markdown-content)
+	"Preview MARKDOWN-CONTENT with html."
+  (interactive)
+  (when-let ((html-result (org-markdown-preview-pandoc-from-string
+                           markdown-content
+                           org-markdown-preview-pandoc-output-type
+                           "html5")))
+    (unless org-markdown-preview-websocket-server
+      (org-markdown-preview-run-socket))
+    (unless (process-status "httpd")
+      (httpd-start))
+    (org-markdown-preview-browse-preview)
+    (org-markdown-preview-websocket-send-msg-to-client
+     "refresh"
+     html-result)))
 
 (defvar org-markdown-preview-html-source-file
   (expand-file-name "markdown-preview.html" org-markdown-preview-data-root)
@@ -194,8 +308,61 @@ Th file name based on the local value of `org-markdown-preview-preview-buffer'."
   (condition-case err
       (let ((msg (websocket-frame-payload frame)))
         (pcase msg
-          ("getHtml" (org-markdown-preview-websocket-send-html))))
+          ("getHtml" (org-markdown-preview-current-buffer))))
     (error (message "%s" err))))
+
+(defun org-markdown-preview-cleanup ()
+  "Close websocket server and reset `org-markdown-preview-org-buffer'."
+  (when org-markdown-preview-websocket-server
+    (unless (eq 'closed (process-status org-markdown-preview-websocket-server))
+      (websocket-server-close org-markdown-preview-websocket-server)))
+  (setq org-markdown-preview-websocket-server nil)
+  (setq org-markdown-preview-org-buffer nil))
+
+;;;###autoload
+(defun org-markdown-preview-edit-md-region ()
+  "Edit current buffer with markdown in org buffer."
+  (interactive)
+  (let ((buff (current-buffer))
+        (pos (point))
+        (md-content (buffer-substring-no-properties (point-min) (point-max)))
+        (org-content))
+    (setq org-markdown-preview-source-buffer buff)
+    (setq org-content
+          (if (string-empty-p (string-trim md-content))
+              ""
+            (or (org-markdown-preview-pandoc-from-string
+                 md-content org-markdown-preview-pandoc-output-type "org")
+                "")))
+    (when-let ((wind (get-buffer-window buff)))
+      (unless (eq wind (selected-window))
+        (select-window wind))
+      (pop-to-buffer-same-window
+       (with-current-buffer (get-buffer-create "*org-markdown-preview*")
+         (erase-buffer)
+         (insert org-content)
+         (unless (> pos (point-max))
+           (goto-char pos))
+         (delay-mode-hooks
+           (org-mode))
+         (org-markdown-preview-edit-mode)
+         org-markdown-preview-org-buffer)
+       t))))
+
+(define-minor-mode org-markdown-preview-edit-mode
+  "Minor mode for editing markdown in org buffers.
+
+\\{org-markdown-preview-edit-buffer-map}."
+  :keymap org-markdown-preview-edit-buffer-map
+  :lighter " OrgMarkdown"
+  (setq org-markdown-preview-source-buffer (current-buffer))
+  (add-hook 'kill-buffer-hook 'org-markdown-preview-cleanup
+            nil t)
+  (when org-markdown-preview-edit-persistent-message
+    (setq header-line-format
+	        (substitute-command-keys
+	         "Edit, then exit with `\\[org-markdown-preview-markdown-write]' or abort with \
+`\\[kill-this-buffer]'"))))
 
 (defun org-markdown-preview-run-socket ()
 	"Run websocket server on port 8080."
@@ -205,28 +372,70 @@ Th file name based on the local value of `org-markdown-preview-preview-buffer'."
          :host 'local
          :on-message 'org-markdown-preview-websockets-on-message
          :on-open (lambda (ws)
-                    (message "websocket opened")
+                    (message "websocket opened  %s" ws)
                     (setq org-markdown-preview-websockets
-                          (push ws org-markdown-preview-websockets)))
+                          (push ws org-markdown-preview-websockets))
+                    (when org-markdown-preview-markdown-current-html
+                      (org-markdown-preview-websocket-send-msg-to-client
+                       "refresh"
+                       org-markdown-preview-markdown-current-html)))
          :on-close (lambda (ws)
-                     (message "websocket closed")
+                     (message "websocket closed  %s" ws)
                      (setq org-markdown-preview-websockets
                            (delete ws org-markdown-preview-websockets))))))
+
+(defun org-markdown-preview-setup-buffers ()
+  (let ((buff (current-buffer)))
+    (setq org-markdown-preview-source-buffer buff)
+    (pcase major-mode
+      ((or 'org-mode 'outline-mode)
+       (unless (eq org-markdown-preview-org-buffer buff)
+         (when (bufferp org-markdown-preview-org-buffer)
+           (kill-buffer org-markdown-preview-org-buffer))
+         (when (bufferp org-markdown-preview-md-buffer)
+           (kill-buffer org-markdown-preview-md-buffer))
+         (setq org-markdown-preview-org-buffer buff)
+         (setq org-markdown-preview-md-buffer nil)))
+      ((or 'markdown-mode
+           'gfm-mode
+           'gfm-view-mode)
+       (unless (eq org-markdown-preview-md-buffer buff)
+         (when (bufferp org-markdown-preview-md-buffer)
+           (kill-buffer org-markdown-preview-md-buffer))
+         (when (bufferp org-markdown-preview-org-buffer)
+           (kill-buffer org-markdown-preview-org-buffer))
+         (setq org-markdown-preview-org-buffer nil)
+         (setq org-markdown-preview-md-buffer buff))))))
+
+(defun org-markdown-preview-run ()
+  "Run httpd server and websockets."
+  (interactive)
+  (when (or (not org-markdown-preview-websocket-server)
+            (eq (process-status org-markdown-preview-websocket-server)
+                'listen))
+    (when org-markdown-preview-websocket-server
+      (websocket-server-close
+       org-markdown-preview-websocket-server)
+      (setq org-markdown-preview-websocket-server nil))
+    (org-markdown-preview-run-socket))
+  (unless (eq (process-status "httpd")
+              'listen)
+    (httpd-stop)
+    (httpd-start))
+  (setq org-markdown-preview-websockets
+        (seq-filter #'websocket-openp org-markdown-preview-websockets))
+  (unless org-markdown-preview-websockets
+    (org-markdown-preview-browse-preview)))
 
 (defun org-markdown-preview-init ()
 	"Initialize markdown preview mode."
   (remove-hook 'after-save-hook
-               'org-markdown-preview-websocket-send-html
+               'org-markdown-preview-current-buffer
                'local)
   (add-hook 'after-save-hook
-            'org-markdown-preview-websocket-send-html
+            'org-markdown-preview-current-buffer
             nil 'local)
-  (setq org-markdown-preview-preview-buffer (current-buffer))
-  (unless org-markdown-preview-websocket-server
-    (org-markdown-preview-run-socket))
-  (unless (process-status "httpd")
-    (httpd-start))
-  (org-markdown-preview-browse-preview))
+  (org-markdown-preview-setup-buffers))
 
 ;;;###autoload
 (define-minor-mode org-markdown-preview-mode
@@ -236,7 +445,7 @@ Uses `browse-url' to launch a browser."
   (if org-markdown-preview-mode
       (org-markdown-preview-init)
     (remove-hook 'after-save-hook
-                 'org-markdown-preview-websocket-send-html
+                 'org-markdown-preview-current-buffer
                  'local)
     (when org-markdown-preview-websocket-server
       (websocket-server-close org-markdown-preview-websocket-server)

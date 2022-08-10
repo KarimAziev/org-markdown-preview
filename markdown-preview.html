@@ -18,80 +18,83 @@
     });
   </script>
   <script type="text/javascript">
-    document.addEventListener('DOMContentLoaded', (event) => {
-      var WS_PORT = 8080;
-      var WS_URL = 'ws://localhost:'.concat(WS_PORT);
-      function refreshMd(data) {
-        var payload = data.payload;
-        var elem = document.querySelector('article.markdown-body');
-        if (elem) {
-          elem.innerHTML = payload;
-        }
-        document.querySelectorAll('pre code').forEach((el) => {
-          hljs.highlightElement(el);
-        });
+    var WS_PORT = 8080;
+    var WS_URL = 'ws://localhost:'.concat(8080);
+    function refreshMd(data) {
+      var payload = data.payload;
+      var elem = document.querySelector('article.markdown-body');
+      if (elem) {
+        elem.innerHTML = payload;
       }
-      var actions = {
-        refresh: refreshMd,
+      document.querySelectorAll('pre code').forEach((el) => {
+        hljs.highlightElement(el);
+      });
+    }
+    var actions = {
+      refresh: refreshMd,
+    };
+    var WSBridge = /** @class */ (function () {
+      function WSBridge() {
+        this.queue = [];
+        this.ws = null;
+        this.makeWS = this.makeWS.bind(this);
+        this.ws = this.makeWS();
+        this.queue = [];
+      }
+      WSBridge.build = function () {
+        return new WSBridge();
       };
-      var WSBridge = /** @class */ (function () {
-        function WSBridge() {}
-        WSBridge.prototype.init = function () {
-          this.queue = ['getHtml'];
-          return this.makeWS(this.queue);
-        };
-        WSBridge.prototype.makeWS = function (queue) {
-          var ws = new WebSocket(WS_URL);
-          ws.onopen = function () {
-            while (queue.length > 0) {
-              var m = queue.shift();
-              if (typeof m === 'string') {
-                ws.send(m);
-              }
-            }
-          };
-          ws.onmessage = function (wsMsg) {
-            var data = JSON.parse(wsMsg.data);
-            var actionType = data.type;
-            var handler = actions[actionType];
-            if (typeof handler === 'function') {
-              handler(data);
-            }
-          };
-          ws.onclose = function (evt) {
-            console.log('websocket closed:', evt);
-          };
-          return ws;
-        };
-        WSBridge.prototype.send = function (msg) {
-          var payload = JSON.stringify(msg);
-          if (this.ws.readyState === this.ws.CONNECTING) {
-            this.queue.push(payload);
-          } else if (this.ws.readyState === this.ws.OPEN) {
-            this.ws.send(payload);
+      WSBridge.prototype.makeWS = function () {
+        var _this = this;
+        var ws = new WebSocket(WS_URL);
+        console.log('ws:', ws);
+        ws.onopen = function () {
+          while (_this.queue.length > 0) {
+            ws.send(_this.queue.shift());
           }
         };
-        return WSBridge;
-      })();
+        ws.onmessage = function (wsMsg) {
+          var data = JSON.parse(wsMsg.data);
+          var actionType = data.type;
+          var handler = actions[actionType];
+          if (typeof handler === 'function') {
+            handler(data);
+          }
+        };
+        ws.onclose = function (evt) {
+          console.log('evt:', {
+            type: 'closed',
+            payload: { code: evt.code, reason: evt.reason },
+          });
+        };
+        return ws;
+      };
+      WSBridge.prototype.sendMessage = function (msg) {
+        msg = JSON.stringify(msg);
+        if (this.ws.readyState === this.ws.CONNECTING) {
+          this.queue.push(msg);
+        } else if (this.ws.readyState === this.ws.OPEN) {
+          this.ws.send(msg);
+        }
+      };
+      return WSBridge;
+    })();
+    var wsBridge = WSBridge.build();
 
-        var ws = new WSBridge();
-        ws.init();
-        ws.send('getHtml');
-        document.querySelectorAll('pre code').forEach((el) => {
-            hljs.highlightElement(el);
-      });
+    document.addEventListener('DOMContentLoaded', (event) => {
+      wsBridge.sendMessage('getHtml');
     });
   </script>
   <body>
-      <article
-          class="markdown-body"
-          style="
-                 box-sizing: border-box;
-                 min-width: 200px;
-                 max-width: 980px;
-                 margin: 0 auto;
-                 padding: 45px;
-                 "
-      ></article>
+    <article
+      class="markdown-body"
+      style="
+        box-sizing: border-box;
+        min-width: 200px;
+        max-width: 980px;
+        margin: 0 auto;
+        padding: 45px;
+      "
+    ></article>
   </body>
 </html>
