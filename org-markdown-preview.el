@@ -57,7 +57,10 @@
 (defvar org-markdown-preview-websockets nil)
 (defvar org-markdown-preview-websocket-server nil)
 (defvar org-markdown-preview-markdown-current-html nil)
-(defvar org-markdown-preview-data-root (file-name-directory load-file-name))
+(defvar org-markdown-preview-data-root
+  (file-name-directory
+   (or load-file-name
+       buffer-file-name)))
 
 (defcustom org-markdown-preview-pandoc-output-type "gfm"
   "Markdown output type for `pandoc'."
@@ -70,11 +73,8 @@
                  (string :tag "Other"))
   :group 'org-markdown-preview)
 
-;;;###autoload
-(defun org-markdown-preview-browse-preview ()
-	"Visit a served page in a browser.
-Uses `browse-url' to launch a browser"
-  (interactive)
+(defun org-markdown-preview-get-url ()
+  "Return an url with served page."
   (let* ((proc (get-process "httpd"))
          (proc-info (process-contact proc t))
          (raw-host (plist-get proc-info :host))
@@ -83,24 +83,31 @@ Uses `browse-url' to launch a browser"
                    "localhost"
                  raw-host))
          (local-addr (plist-get proc-info :local))
-         (port (aref local-addr (1- (length local-addr))))
-         (url (format "http://%s:%d/org-markdown-preview/preview"
-                      host port)))
-    (let* ((orig-wind (selected-window))
-           (wind-target (if (minibuffer-window-active-p orig-wind)
-                            (with-minibuffer-selected-window
-                              (let ((wind (selected-window)))
-                                (or
-                                 (window-right wind)
-                                 (window-left wind)
-                                 (split-window-right))))
-                          (let ((wind (selected-window)))
-                            (or
-                             (window-right wind)
-                             (window-left wind)
-                             (split-window-right))))))
-      (with-selected-window wind-target
-        (browse-url url)))))
+         (port (aref local-addr (1- (length local-addr)))))
+    (format "http://%s:%d/org-markdown-preview/preview"
+            host port)))
+
+;;;###autoload
+(defun org-markdown-preview-browse-preview ()
+  "Visit a served page in a browser.
+Uses `browse-url' to launch a browser"
+  (interactive)
+  (let* ((url (org-markdown-preview-get-url))
+         (orig-wind (selected-window))
+         (wind-target (if (minibuffer-window-active-p orig-wind)
+                          (with-minibuffer-selected-window
+                            (let ((wind (selected-window)))
+                              (or
+                               (window-right wind)
+                               (window-left wind)
+                               (split-window-right))))
+                        (let ((wind (selected-window)))
+                          (or
+                           (window-right wind)
+                           (window-left wind)
+                           (split-window-right))))))
+    (with-selected-window wind-target
+      (browse-url url))))
 
 (defun org-markdown-preview-websocket-send-msg-to-client (type &optional
                                                                payload)
