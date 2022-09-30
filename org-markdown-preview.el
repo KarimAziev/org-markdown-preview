@@ -57,10 +57,11 @@
 (defvar org-markdown-preview-websockets nil)
 (defvar org-markdown-preview-websocket-server nil)
 (defvar org-markdown-preview-markdown-current-html nil)
-(defvar org-markdown-preview-data-root
-  (file-name-directory
-   (or load-file-name
-       buffer-file-name)))
+
+(defconst org-markdown-preview-data-root
+  (file-name-directory (if (bound-and-true-p load-file-name) load-file-name
+                         (buffer-file-name)))
+  "The directory where `org-markdown-preview' package exists.")
 
 (defcustom org-markdown-preview-pandoc-output-type "gfm"
   "Markdown output type for `pandoc'."
