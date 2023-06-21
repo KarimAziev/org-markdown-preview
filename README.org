@@ -1,4 +1,4 @@
-A minor mode for live preview of org mode and markdown buffers.
+A realtime ~markdown~ and ~org-mode~ preview in Emacs.
 
 [[./demo.gif][./demo.gif]]
 
@@ -11,8 +11,10 @@ A minor mode for live preview of org mode and markdown buffers.
   - [[#with-use-package-and-straight][With ~use-package~ and ~straight~]]
   - [[#manual-installation][Manual installation]]
 - [[#usage][Usage]]
-  - [[#org-mode][Org-mode:]]
-  - [[#markdown-mode][Markdown-mode:]]
+- [[#customization][Customization]]
+- [[#screenshots][Screenshots]]
+  - [[#org-mode][Org-mode]]
+  - [[#markdown-mode][Markdown-mode]]
 #+END_QUOTE
 
 * Requirements
@@ -23,10 +25,10 @@ A minor mode for live preview of org mode and markdown buffers.
 | Emacs   | >=28.1  | Editor                       |
 
 ** Emacs Packages
-| Package      | Version  | Description                        |
-|--------------+----------+------------------------------------|
-| [[https://github.com/skeeto/emacs-http-server][simple-httpd]] | >= 0.4.0 | Builtin library (from Emacs 28.1). |
-| [[https://github.com/ahyatt/emacs-websocket][websocket]]    | >= 1.14  |                                    |
+| Package      | Version  | Description                     |
+|--------------+----------+---------------------------------|
+| [[https://github.com/skeeto/emacs-http-server][simple-httpd]] | >= 0.4.0 | A simple Emacs web server.      |
+| [[https://github.com/ahyatt/emacs-websocket][websocket]]    | >= 1.14  | A library for websocket clients |
 
 * Installation
 
@@ -60,10 +62,30 @@ Add the downloaded directory to the load path:
 
 Run it in ~org-mode~ or ~markdown~ buffers.
 
+In ~org-mode~ to see and write markdown result, you can use command:
 
-** Org-mode:
+~M-x org-markdown-preview-markdown-write~.
+
+* Customization
+
+*** ~org-markdown-preview-websocket-port~
+Websocket port.
+*** ~org-markdown-preview-browse-fn~
+Function for browsing preview page. It will be called with one argument - url to open. Default value is to use xwidgets if available, othervise =browse-url=.
+*** ~org-markdown-preview-refresh-delay~
+How many seconds to wait after running hooks before refreshing content. If nil, refresh after imediatelly after running =org-markdown-preview-refresh-behavior=
+*** ~org-markdown-preview-refresh-behavior~
+When to refresh preview page. It should be a name of a hook (a symbol) where should refresh handler be added.
+*** ~org-markdown-preview-pandoc-options~
+Extra pandoc options.
+*** ~org-markdown-preview-scroll-delay~
+How many seconds to wait after last command before scroll sync. If nil, inhibit scroll sync at all.
+*** ~org-markdown-preview-pandoc-output-type~
+Markdown output type for =pandoc=.
+* Screenshots
+** Org-mode
 [[./demo-org.png]]
 
-** Markdown-mode:
+** Markdown-mode
 [[./demo-markdown.png]]
 
