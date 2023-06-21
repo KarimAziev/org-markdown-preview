@@ -6,7 +6,8 @@
 ;; URL: https://github.com/KarimAziev/org-markdown-preview
 ;; Version: 0.1.0
 ;; Keywords: outlines convenience docs
-;; Package-Requires: ((emacs "27.1"))
+;; Package-Requires: ((emacs "27.1") (websocket "1.13") (simple-httpd "1.5.1"))
+;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;; This file is NOT part of GNU Emacs.
 
@@ -87,8 +88,7 @@ If nil, inhibit scroll sync at all."
 (defcustom org-markdown-preview-pandoc-options '("--quiet"
                                                  "--self-contained"
                                                  "--highlight-style=zenburn")
-  "How many seconds to wait after last command before scroll sync.
-If nil, inhibit scroll sync at all."
+  "Extra pandoc options."
   :group 'org-markdown-preview
   :type '(repeat string))
 
