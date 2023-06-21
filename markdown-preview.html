@@ -70,21 +70,18 @@
           }
         }
       }
-      const refreshAction = (payload) => {
-        const elem = document.querySelector('article.markdown-body');
-        if (elem) {
-          elem.innerHTML = payload;
-        }
-      };
+
       const bridge = WSBridge.build(
         7071,
         {
           refresh(payload) {
             console.log('refresh payload', payload);
             const elem = document.querySelector('article.markdown-body');
+
             if (elem) {
               elem.innerHTML = payload;
             }
+            hljs.highlightAll();
           },
           scroll(scrollYPercent) {
             console.log('scrollYPercent', scrollYPercent);
