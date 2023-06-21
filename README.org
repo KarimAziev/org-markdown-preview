@@ -35,10 +35,10 @@ A realtime ~markdown~ and ~org-mode~ preview in Emacs.
 ** With ~use-package~ and ~straight~
 #+begin_src elisp :eval no
 (use-package org-markdown-preview
-  :straight (org-markdown-preview
-             :repo "KarimAziev/org-markdown-preview"
-             :type git
-             :host github))
+  :straight (:repo "KarimAziev/org-markdown-preview"
+                   :type git
+                   :host github
+                   :files ("*.html" "*.el")))
 #+end_src
 
 ** Manual installation
