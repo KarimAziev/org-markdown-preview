@@ -1,0 +1,69 @@
+A minor mode for live preview of org mode and markdown buffers.
+
+[[./demo.gif][./demo.gif]]
+
+* Table of Contents                                       :TOC_2_gh:QUOTE:noexport:
+#+BEGIN_QUOTE
+- [[#requirements][Requirements]]
+  - [[#programs][Programs]]
+  - [[#emacs-packages][Emacs Packages]]
+- [[#installation][Installation]]
+  - [[#with-use-package-and-straight][With ~use-package~ and ~straight~]]
+  - [[#manual-installation][Manual installation]]
+- [[#usage][Usage]]
+  - [[#org-mode][Org-mode:]]
+  - [[#markdown-mode][Markdown-mode:]]
+#+END_QUOTE
+
+* Requirements
+** Programs
+| Program | Version | Description                  |
+|---------+---------+------------------------------|
+| [[https://pandoc.org/installing.html][pandoc]]  | Latest  | Universal document converter |
+| Emacs   | >=28.1  | Editor                       |
+
+** Emacs Packages
+| Package      | Version  | Description                        |
+|--------------+----------+------------------------------------|
+| [[https://github.com/skeeto/emacs-http-server][simple-httpd]] | >= 0.4.0 | Builtin library (from Emacs 28.1). |
+| [[https://github.com/ahyatt/emacs-websocket][websocket]]    | >= 1.14  |                                    |
+
+* Installation
+
+** With ~use-package~ and ~straight~
+#+begin_src elisp :eval no
+(use-package org-markdown-preview
+  :straight (org-markdown-preview
+             :repo "KarimAziev/org-markdown-preview"
+             :type git
+             :host github))
+#+end_src
+
+** Manual installation
+
+Download the source code and put it wherever you like, e.g. into =~/.emacs.d/org-markdown-preview/=
+
+#+begin_src shell :eval no
+git clone https://github.com/KarimAziev/org-markdown-preview.git ~/.emacs.d/org-markdown-preview/
+#+end_src
+
+Add the downloaded directory to the load path:
+
+#+begin_src elisp :eval no
+(add-to-list 'load-path "~/.emacs.d/org-markdown-preview/")
+(require 'org-markdown-preview)
+#+end_src
+
+* Usage
+
+~M-x org-markdown-preview-mode RET~
+
+Run it in ~org-mode~ or ~markdown~ buffers.
+
+
+** Org-mode:
+[[./demo-org.png]]
+
+** Markdown-mode:
+[[./demo-markdown.png]]
+

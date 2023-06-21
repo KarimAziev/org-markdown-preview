@@ -35,7 +35,7 @@
 
         actions = {};
 
-        makeWS(port = 8080) {
+        makeWS(port = 7071) {
           const ws = new WebSocket(`ws://localhost:${port}`);
           ws.onopen = () => {
             console.log('on open', this.queue);
@@ -77,7 +77,7 @@
         }
       };
       const bridge = WSBridge.build(
-        8080,
+        7071,
         {
           refresh(payload) {
             console.log('refresh payload', payload);

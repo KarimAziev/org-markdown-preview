@@ -84,6 +84,14 @@ If nil, inhibit scroll sync at all."
                  (number
                   :tag "Seconds")))
 
+(defcustom org-markdown-preview-pandoc-options '("--quiet"
+                                                 "--self-contained"
+                                                 "--highlight-style=zenburn")
+  "How many seconds to wait after last command before scroll sync.
+If nil, inhibit scroll sync at all."
+  :group 'org-markdown-preview
+  :type '(repeat string))
+
 (defcustom org-markdown-preview-refresh-behavior 'after-save-hook
   "When to refresh preview page.
 It should be a name of a hook (a symbol) where should refresh handler be added."
@@ -124,7 +132,7 @@ Default value is to use xwidgets if available, othervise `browse-url'."
                   :tag "Custom function"))
   :group 'org-markdown-preview)
 
-(defcustom org-markdown-preview-websocket-port 7070
+(defcustom org-markdown-preview-websocket-port 7071
   "Websocket port."
   :type 'integer
   :group 'org-markdown-preview)
@@ -187,15 +195,13 @@ Uses `browse-url' to launch a browser"
 
 (defvar org-markdown-preview-preview-buffer nil)
 (defvar org-markdown-preview-md-content nil)
-(defun org-markdown-preview-pandoc-from-string (string input-type output-type
-                                                       &rest options)
-  "Execute `pandoc' on STRING in INPUT-TYPE to OUTPUT-TYPE additional OPTIONS."
-  (setq options (delete nil (flatten-list options)))
+(defun org-markdown-preview-pandoc-from-string (string input-type output-type)
+  "Execute `pandoc' on STRING in INPUT-TYPE to OUTPUT-TYPE."
   (let ((args (append
                (list "pandoc" t t nil)
                (list "-f" input-type "-t"
                      output-type)
-               options)))
+               org-markdown-preview-pandoc-options)))
     (with-temp-buffer
       (insert string)
       (when (zerop (apply #'call-process-region (append (list (point-min)
@@ -246,9 +252,6 @@ Org content is taken from `org-markdown-preview-preview-buffer'."
 (defun org-markdown-preview-calc-size-percent ()
   "Calulate scroll percent relative to Emacs buffer.
 The result is a floating number from 0 to 1, formatted to string."
-  ;; (value (/ (float (round (* 100 (/ (float (point))
-  ;;                                          (float (buffer-size))))))
-  ;;                  100))
   (let ((value (/ (float (truncate (* 100 (/ (float (-  (line-number-at-pos)
                                                         (/
                                                          (count-screen-lines
@@ -276,10 +279,8 @@ The result is a floating number from 0 to 1, formatted to string."
 (defun org-markdown-preview-run-in-buffer (buffer fn &rest args)
   "Apply FN with ARGS in BUFFER if it is live."
   (when (and buffer (buffer-live-p buffer))
-    (if (eq buffer (current-buffer))
-        (apply fn args)
-      (with-current-buffer buffer
-        (apply fn args)))))
+    (with-current-buffer buffer
+      (apply fn args))))
 
 (defun org-markdown-preview-debounce (timer-sym delay fn &rest args)
   "Debounce execution FN with ARGS for DELAY.
@@ -341,28 +342,40 @@ Th file name based on the local value of `org-markdown-preview-preview-buffer'."
   (expand-file-name "markdown-preview.html" org-markdown-preview-data-root)
   "Source file name or buffer for `httpd/skewer/demo' servlet.")
 
+(defun org-markdown-preview-servervlet-content ()
+  "Return content with serverlet."
+  (let* ((default-port (format "%s" (eval (car (get
+                                                'org-markdown-preview-websocket-port
+                                                'standard-value)))))
+         (port (format "%s" org-markdown-preview-websocket-port))
+         (regex (regexp-opt (list default-port) 'symbols)))
+    (with-temp-buffer
+      (insert-file-contents org-markdown-preview-html-source-file)
+      (goto-char (point-min))
+      (while (re-search-forward regex nil t 1)
+        (replace-match port))
+      (buffer-string))))
+
 (defservlet org-markdown-preview
   "text/html; charset=UTF-8" ()
-  (when org-markdown-preview-preview-buffer
-    (buffer-local-value 'default-directory org-markdown-preview-preview-buffer))
-  (insert-file-contents org-markdown-preview-html-source-file))
+  (insert (org-markdown-preview-servervlet-content)))
 
 (defun org-markdown-preview-websockets-on-message (_websockets frame)
   "Handle websocket messages on the websocket FRAME struct."
   (condition-case err
       (let ((msg (websocket-frame-payload frame)))
-        (message "ws: %s" msg)
         (pcase msg
           ("getHtml"
-           (message "wwebockes: %s" msg)
            (org-markdown-preview-websocket-send-html))))
     (error (message "%s" err))))
 
 (defun org-markdown-preview-run-socket ()
-  "Run websocket server on port 8080."
+  "Run websocket server on port `org-markdown-preview-websocket-port'."
+  (when org-markdown-preview-websocket-server
+    (websocket-server-close org-markdown-preview-websocket-server))
   (setq org-markdown-preview-websocket-server
         (websocket-server
-         8080
+         org-markdown-preview-websocket-port
          :host 'local
          :on-message 'org-markdown-preview-websockets-on-message
          :on-open (lambda (ws)
@@ -427,16 +440,24 @@ if value `org-markdown-preview-scroll-delay' is nil."
                    'local))
     (remove-hook 'post-command-hook #'org-markdown-preview-scroll t)))
 
-;;;###autoload
-(define-minor-mode org-markdown-preview-mode
-  "Export org file to markdown on save, starts server with hot-reloading.
-Uses `browse-url' to launch a browser."
-  :keymap
+(defvar org-markdown-preview-mode-map
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "C-c M-e")
                 #'org-markdown-preview-markdown-write)
-    map)
+    map))
+
+;;;###autoload
+(define-minor-mode org-markdown-preview-mode
+  "Toggle realtime preview of markdown or `org-mode' content in current buffer."
+  :keymap org-markdown-preview-mode-map
   :global nil
+  (when (and (buffer-live-p org-markdown-preview-preview-buffer)
+             (not (eq (current-buffer) org-markdown-preview-preview-buffer))
+             (buffer-local-value 'org-markdown-preview-mode
+                                 org-markdown-preview-preview-buffer))
+    (with-current-buffer org-markdown-preview-preview-buffer
+      (org-markdown-preview-mode -1))
+    (setq org-markdown-preview-preview-buffer nil))
   (org-markdown-preview-setup-off)
   (org-markdown-preview-cleanup-timers)
   (setq org-markdown-preview-preview-buffer (current-buffer))
