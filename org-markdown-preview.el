@@ -195,6 +195,18 @@ Uses `browse-url' to launch a browser"
 
 (defvar org-markdown-preview-preview-buffer nil)
 (defvar org-markdown-preview-md-content nil)
+
+(defun org-markdown-preview-strip-propererties ()
+  "Remove properties from `org-mode' markdown preview."
+  (save-excursion
+    (goto-char (point-min))
+    (let ((case-fold-search t))
+      (while (re-search-forward
+              ":PROPERTIES:[\n]+[\s\t]+:CUSTOM_ID:[\s\t][^\n]+[\n]+[\s\t]+:END:[\n]"
+              nil t
+              1)
+        (replace-match "")))))
+
 (defun org-markdown-preview-pandoc-from-string (string input-type output-type)
   "Execute `pandoc' on STRING in INPUT-TYPE to OUTPUT-TYPE."
   (let ((args (append
@@ -207,7 +219,10 @@ Uses `browse-url' to launch a browser"
       (when (zerop (apply #'call-process-region (append (list (point-min)
                                                               (point-max))
                                                         args)))
+        (pcase output-type
+          ("org" (org-markdown-preview-strip-propererties)))
         (buffer-string)))))
+
 
 (defun org-markdown-preview-refresh-buffer ()
   "Convert and send current buffer's content to preview page."
