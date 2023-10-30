@@ -87,7 +87,8 @@ If nil, inhibit scroll sync at all."
 
 (defcustom org-markdown-preview-pandoc-options '("--quiet"
                                                  "--self-contained"
-                                                 "--highlight-style=zenburn")
+                                                 "--highlight-style=zenburn"
+                                                 "--wrap=none")
   "Extra pandoc options."
   :group 'org-markdown-preview
   :type '(repeat string))
@@ -207,6 +208,18 @@ Uses `browse-url' to launch a browser"
               1)
         (replace-match "")))))
 
+(defun org-markdown-preview-preprocess-org-content ()
+  "Replace `emacs-lisp' with `elisp' in \"#+begin_src\" tags.
+The reason is Pandoc will convert `emacs-lisp' to `commonlisp'
+in the markdown output."
+  (save-excursion
+    (goto-char (point-min))
+    (let ((case-fold-search t))
+      (while (re-search-forward "#\\+begin_src[\s]+\\_<\\(emacs-lisp\\)\\_>" nil
+                                t
+                                1)
+        (replace-match "elisp" nil nil nil 1)))))
+
 (defun org-markdown-preview-pandoc-from-string (string input-type output-type)
   "Execute `pandoc' on STRING in INPUT-TYPE to OUTPUT-TYPE."
   (let ((args (append
@@ -216,12 +229,15 @@ Uses `browse-url' to launch a browser"
                org-markdown-preview-pandoc-options)))
     (with-temp-buffer
       (insert string)
+      (pcase input-type
+        ("org" (org-markdown-preview-preprocess-org-content)))
       (when (zerop (apply #'call-process-region (append (list (point-min)
                                                               (point-max))
                                                         args)))
         (pcase output-type
           ("org" (org-markdown-preview-strip-propererties)))
         (buffer-string)))))
+
 
 
 (defun org-markdown-preview-refresh-buffer ()
@@ -331,6 +347,24 @@ If it is nil, don's update position at all."
                                    org-markdown-preview-scroll-delay
                                    #'org-markdown-preview--scroll)))
 
+;;;###autoload
+(defun org-markdown-preview-copy-org-as-markdown ()
+  "Write `org-markdown-preview-md-content' to the markdown file.
+Th file name based on the local value of `org-markdown-preview-preview-buffer'."
+  (interactive)
+  (pcase-let* ((`(,beg . ,end)
+                (if (region-active-p)
+                    (cons (region-beginning)
+                          (region-end))
+                  (cons (point-min)
+                        (point-max))))
+               (content (org-markdown-preview-pandoc-from-string
+                         (buffer-substring-no-properties beg end)
+                         "org"
+                         org-markdown-preview-pandoc-output-type)))
+    (kill-new content)
+    (message "Copied as markdown")
+    content))
 
 ;;;###autoload
 (defun org-markdown-preview-markdown-write ()
@@ -394,7 +428,7 @@ Th file name based on the local value of `org-markdown-preview-preview-buffer'."
          :host 'local
          :on-message 'org-markdown-preview-websockets-on-message
          :on-open (lambda (ws)
-                    (message "websocket opened")
+                    (message "org-markdown-preview: opened")
                     (setq org-markdown-preview-websockets
                           (push ws org-markdown-preview-websockets))
                     (org-markdown-preview-websocket-send-html)
@@ -402,7 +436,7 @@ Th file name based on the local value of `org-markdown-preview-preview-buffer'."
                       (with-current-buffer org-markdown-preview-preview-buffer
                         (org-markdown-preview--scroll))))
          :on-close (lambda (ws)
-                     (message "websocket closed")
+                     (message "org-markdown-preview: closed")
                      (setq org-markdown-preview-websockets
                            (delete ws org-markdown-preview-websockets))))))
 
