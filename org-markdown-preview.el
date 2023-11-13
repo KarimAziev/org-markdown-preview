@@ -348,9 +348,26 @@ If it is nil, don's update position at all."
                                    #'org-markdown-preview--scroll)))
 
 ;;;###autoload
+(defun org-markdown-preview-copy-markdown-as-org ()
+  "Copy markdown content as org format to clipboard."
+  (interactive)
+  (pcase-let* ((`(,beg . ,end)
+                (if (region-active-p)
+                    (cons (region-beginning)
+                          (region-end))
+                  (cons (point-min)
+                        (point-max))))
+               (content (org-markdown-preview-pandoc-from-string
+                         (buffer-substring-no-properties beg end)
+                         org-markdown-preview-pandoc-output-type
+                         "org")))
+    (kill-new content)
+    (message "Copied as org")
+    content))
+
+;;;###autoload
 (defun org-markdown-preview-copy-org-as-markdown ()
-  "Write `org-markdown-preview-md-content' to the markdown file.
-Th file name based on the local value of `org-markdown-preview-preview-buffer'."
+  "Copy the selected region or entire buffer from Org to Markdown format."
   (interactive)
   (pcase-let* ((`(,beg . ,end)
                 (if (region-active-p)
@@ -368,8 +385,7 @@ Th file name based on the local value of `org-markdown-preview-preview-buffer'."
 
 ;;;###autoload
 (defun org-markdown-preview-markdown-write ()
-  "Write `org-markdown-preview-md-content' to the markdown file.
-Th file name based on the local value of `org-markdown-preview-preview-buffer'."
+  "Write markdown content to a file if conditions are met."
   (interactive)
   (when (and org-markdown-preview-md-content
              (buffer-live-p org-markdown-preview-preview-buffer)
@@ -497,7 +513,30 @@ if value `org-markdown-preview-scroll-delay' is nil."
 
 ;;;###autoload
 (define-minor-mode org-markdown-preview-mode
-  "Toggle realtime preview of markdown or `org-mode' content in current buffer."
+  "Preview `Org-mode' content as `GitHub-Flavored' Markdown in a web browser.
+
+Enable `org-markdown-preview-mode' to preview Org files in a web browser as
+GitHub Flavored Markdown (GFM). This mode uses a local HTTP server and
+WebSockets to provide live updates to the preview as the Org file is edited.
+
+When the mode is enabled, it starts an HTTP server, opens the default web
+browser to display the preview, and sets up hooks to update the preview and
+scroll position in response to changes in the Org file. The preview is generated
+using Pandoc, with options customizable via
+`org-markdown-preview-pandoc-options'.
+
+The mode also provides several customization options, including
+`org-markdown-preview-pandoc-output-type' to specify the output type for Pandoc,
+`org-markdown-preview-scroll-delay' to set the delay before updating the scroll
+position, `org-markdown-preview-pandoc-options' to specify extra options for
+Pandoc, `org-markdown-preview-refresh-behavior' to control when to refresh the
+preview page, `org-markdown-preview-refresh-delay' to set the delay before
+refreshing the content, `org-markdown-preview-browse-fn' to specify the function
+for browsing the preview page, and `org-markdown-preview-websocket-port' to set
+the WebSocket port.
+
+When the mode is disabled, it stops the HTTP server, closes the WebSocket
+connections, and removes the hooks it has set up."
   :keymap org-markdown-preview-mode-map
   :global nil
   (when (and (buffer-live-p org-markdown-preview-preview-buffer)
