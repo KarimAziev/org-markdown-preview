@@ -176,7 +176,7 @@ Default value is to use xwidgets if available, othervise `browse-url'."
   "Visit a served page in a browser.
 Uses `browse-url' to launch a browser"
   (interactive)
-  (if-let ((url (org-markdown-preview-get-url)))
+  (if-let* ((url (org-markdown-preview-get-url)))
       (funcall org-markdown-preview-browse-fn url)
     (user-error
      "org-markdown-preview: Couldn't resolve url, ensure that httpd is running")))
@@ -316,7 +316,7 @@ The result is a floating number from 0 to 1, formatted to string."
 (defun org-markdown-preview-debounce (timer-sym delay fn &rest args)
   "Debounce execution FN with ARGS for DELAY.
 TIMER-SYM is a symbol to use as a timer."
-  (when-let ((timer-value (symbol-value timer-sym)))
+  (when-let* ((timer-value (symbol-value timer-sym)))
     (when (timerp timer-value)
       (cancel-timer timer-value))
     (set timer-sym nil))
