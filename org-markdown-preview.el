@@ -6,7 +6,7 @@
 ;; URL: https://github.com/KarimAziev/org-markdown-preview
 ;; Version: 0.1.0
 ;; Keywords: outlines convenience docs
-;; Package-Requires: ((emacs "27.1") (websocket "1.13") (simple-httpd "1.5.1"))
+;; Package-Requires: ((emacs "27.1") (websocket "1.15") (simple-httpd "1.5.1"))
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 
 ;; This file is NOT part of GNU Emacs.
@@ -55,6 +55,8 @@
 (require 'websocket)
 (require 'simple-httpd)
 
+(declare-function ghub-post "ghub")
+
 (defvar org-markdown-preview-websockets nil)
 (defvar org-markdown-preview-websocket-server nil)
 (defvar org-markdown-preview-markdown-current-html nil)
@@ -75,6 +77,13 @@
                  (string :tag "Other"))
   :group 'org-markdown-preview)
 
+(defcustom org-markdown-preview-use-github-api t
+  "Whether to use `github' API when rendering HTML content for preview.
+
+Requires `ghub' to be installed."
+  :type 'boolean
+  :group 'org-markdown-preview)
+
 (defcustom org-markdown-preview-scroll-delay 0.5
   "How many seconds to wait after last command before scroll sync.
 If nil, inhibit scroll sync at all."
@@ -86,7 +95,8 @@ If nil, inhibit scroll sync at all."
                   :tag "Seconds")))
 
 (defcustom org-markdown-preview-pandoc-options '("--quiet"
-                                                 "--self-contained"
+                                                 "--embed-resources"
+                                                 "--standalone"
                                                  "--highlight-style=zenburn"
                                                  "--wrap=none")
   "Extra pandoc options."
@@ -134,9 +144,34 @@ Default value is to use xwidgets if available, othervise `browse-url'."
   :group 'org-markdown-preview)
 
 (defcustom org-markdown-preview-websocket-port 7071
-  "Websocket port."
+  "Websocket port to use."
   :type 'integer
   :group 'org-markdown-preview)
+
+(defcustom org-markdown-preview-preprocess-org-content-hook '(org-markdown-preview-preprocess-org-content)
+  "Hook for preprocessing Org content before Markdown preview conversion.
+
+Each function in the hook should accept no arguments and will be called in the
+temporary buffer prior to its processing by Pandoc."
+  :group 'org-markdown-preview
+  :type 'hook)
+
+(defcustom org-markdown-preview-post-process-org-content-hook '(org-markdown-preview-strip-propererties)
+  "Hook for post processing Org content before Markdown preview conversion.
+
+Each function in the hook should accept no arguments and will be called in the
+temporary buffer prior to its processing by Pandoc."
+  :group 'org-markdown-preview
+  :type 'hook)
+
+
+(defcustom org-markdown-preview-post-process-md-content-hook '(org-markdown-preview-cleanup-escape-sequences)
+  "Hook for post processing markdown content before Markdown preview conversion.
+
+Each function in the hook should accept no arguments and will be called in the
+temporary buffer prior to its processing by Pandoc."
+  :group 'org-markdown-preview
+  :type 'hook)
 
 (defun org-markdown-preview-get-url ()
   "Return an url with served page."
@@ -148,9 +183,12 @@ Default value is to use xwidgets if available, othervise `browse-url'."
                    "localhost"
                  raw-host))
          (local-addr (plist-get proc-info :local))
-         (port (aref local-addr (1- (length local-addr)))))
-    (format "http://%s:%d/org-markdown-preview"
-            host port)))
+         (port (aref local-addr (1- (length local-addr))))
+         (path (if org-markdown-preview-use-github-api
+                   "org-markdown-preview-ghub"
+                 "org-markdown-preview")))
+    (format "http://%s:%d/%s"
+            host port path)))
 
 (defun org-markdown-preview-browse-with-xwidget (url)
   "Visit an URL in xwidget in other window."
@@ -181,8 +219,8 @@ Uses `browse-url' to launch a browser"
     (user-error
      "org-markdown-preview: Couldn't resolve url, ensure that httpd is running")))
 
-(defun org-markdown-preview-websocket-send-msg-to-client (type &optional
-                                                               payload)
+(defun org-markdown-preview--websocket-send-msg-to-client (type &optional
+                                                                payload)
   "Notify all opened sockets with message TYPE and PAYLOAD."
   (setq org-markdown-preview-websockets
         (seq-filter #'websocket-openp org-markdown-preview-websockets))
@@ -208,6 +246,16 @@ Uses `browse-url' to launch a browser"
               1)
         (replace-match "")))))
 
+
+(defun org-markdown-preview-cleanup-escape-sequences ()
+  "Clean up escape sequences like \\[X\\] or \\[\\!TIP\\] in the current buffer.
+
+For example, transforms \\[X\\] to [X], \\[\\!TIP\\] into [!TIP] and so on."
+  (save-excursion
+    (goto-char (point-min))
+    (while (re-search-forward "\\\\\\[\\([^\\]*\\)\\\\\\]" nil t)
+      (replace-match "[\\1]" nil nil))))
+
 (defun org-markdown-preview-preprocess-org-content ()
   "Replace `emacs-lisp' with `elisp' in \"#+begin_src\" tags.
 The reason is Pandoc will convert `emacs-lisp' to `commonlisp'
@@ -227,20 +275,32 @@ in the markdown output."
                (list "-f" input-type "-t"
                      output-type)
                org-markdown-preview-pandoc-options)))
+    (princ args)
     (with-temp-buffer
       (insert string)
       (pcase input-type
-        ("org" (org-markdown-preview-preprocess-org-content)))
-      (when (zerop (apply #'call-process-region (append (list (point-min)
-                                                              (point-max))
-                                                        args)))
-        (pcase output-type
-          ("org" (org-markdown-preview-strip-propererties)))
+        ("org" (run-hooks 'org-markdown-preview-preprocess-org-content-hook)))
+      (let ((status
+             (apply #'call-process-region (append (list (point-min)
+                                                        (point-max))
+                                                  args))))
+        (when (and (numberp status)
+                   (zerop status))
+          (pcase output-type
+            ("org" (run-hooks
+                    'org-markdown-preview-post-process-org-content-hook))
+            ((or "gfm"
+                 "markdown"
+                 "markdown_mmd"
+                 "markdown_phpextra"
+                 "markdown_strict"
+                 "markdown_github")
+             (run-hooks 'org-markdown-preview-post-process-md-content-hook))))
         (buffer-string)))))
 
 
 
-(defun org-markdown-preview-refresh-buffer ()
+(defun org-markdown-preview--refresh-buffer ()
   "Convert and send current buffer's content to preview page."
   (cond ((or (derived-mode-p 'org-mode)
              (and buffer-file-name
@@ -252,25 +312,81 @@ in the markdown output."
                  (point-min)
                  (point-max))
                 "org"
-                org-markdown-preview-pandoc-output-type))
-         (setq org-markdown-preview-markdown-current-html
-               (org-markdown-preview-pandoc-from-string
-                org-markdown-preview-md-content
-                org-markdown-preview-pandoc-output-type
-                "html5")))
-        (t (setq org-markdown-preview-md-content (buffer-substring-no-properties
-                                                  (point-min)
-                                                  (point-max)))
-           (setq org-markdown-preview-markdown-current-html
-                 (org-markdown-preview-pandoc-from-string
-                  org-markdown-preview-md-content
-                  org-markdown-preview-pandoc-output-type
-                  "html5"))))
-  (when org-markdown-preview-markdown-current-html
-    (org-markdown-preview-websocket-send-msg-to-client
-     "refresh"
-     org-markdown-preview-markdown-current-html)))
+                org-markdown-preview-pandoc-output-type)))
+        (t
+         (setq org-markdown-preview-md-content
+               (let ((content (buffer-substring-no-properties
+                               (point-min)
+                               (point-max))))
+                 (if org-markdown-preview-post-process-md-content-hook
+                     (with-temp-buffer
+                       (insert content)
+                       (run-hooks
+                        'org-markdown-preview-post-process-md-content-hook)
+                       (buffer-string))
+                   content))))))
 
+
+(defun org-markdown-preview--str-replace (old new s)
+  "Replace occurrences of OLD with NEW in string S.
+
+Argument OLD is the substring to be replaced.
+
+Argument NEW is the replacement substring.
+
+Argument S is the original string where replacements will occur."
+  (declare (pure t) (side-effect-free t))
+  (replace-regexp-in-string (regexp-quote old) new s t t))
+
+(defun org-markdown-preview-add-ids-to-links (html-str)
+  "Add unique id attributes to heading tags (h1-h6) in the given HTML-STR string."
+  (let ((pos 0)
+        (case-fold-search t) ;; Make searches case-insensitive
+        (counter (make-hash-table :test 'equal))
+        (dash-protection-sym
+         "09876543214b825dc642cb6eb9a060e54bf8d69288fbee49041234567890")
+        (underscore-protection-symbol
+         "afec96cafb7bc4b0e216bfe86db4bd6c4aab44bca19dd9999b11e162f595d711"))
+    (while (string-match "<\\(h[1-6]\\)\\([^>]*\\)>\\([^<]+\\)</\\1>" html-str
+                         pos)
+      (let* ((tag (match-string 1 html-str)) ;; The tag name (e.g., h1, h2)
+             (attrs (match-string 2 html-str)) ;; Any existing attributes in the tag
+             (text (match-string 3 html-str)) ;; The text inside the heading
+             (id
+              (thread-last text
+                           string-trim
+                           downcase
+                           (org-markdown-preview--str-replace
+                            "-"
+                            dash-protection-sym)
+                           (org-markdown-preview--str-replace
+                            "_"
+                            underscore-protection-symbol)
+                           (replace-regexp-in-string
+                            "[[:punct:]]" "")
+                           (org-markdown-preview--str-replace
+                            dash-protection-sym
+                            "-")
+                           (org-markdown-preview--str-replace
+                            underscore-protection-symbol
+                            "_")
+                           (org-markdown-preview--str-replace " " "-")))
+             (base-id id)
+             (dup-count 0))
+        ;; Ensure the ID is unique by incrementing a counter if necessary
+        (while (gethash id counter)
+          (setq dup-count (1+ dup-count))
+          (setq id (format "%s-%d" base-id dup-count)))
+        ;; Add the ID to the tracking hash table
+        (puthash id t counter)
+        ;; Replace the heading with the new ID
+        (setq html-str
+              (replace-match
+               (format "<%s id=\"%s\"%s>%s</%s>" tag id attrs text tag)
+               t t html-str))
+        ;; Move the search forward
+        (setq pos (match-end 0))))
+    html-str))
 
 ;;;###autoload
 (defun org-markdown-preview-websocket-send-html ()
@@ -278,7 +394,38 @@ in the markdown output."
 Org content is taken from `org-markdown-preview-preview-buffer'."
   (interactive)
   (with-current-buffer org-markdown-preview-preview-buffer
-    (org-markdown-preview-refresh-buffer)))
+    (org-markdown-preview--refresh-buffer)
+    (when org-markdown-preview-md-content
+      (setq org-markdown-preview-markdown-current-html
+            (org-markdown-preview-pandoc-from-string
+             org-markdown-preview-md-content
+             org-markdown-preview-pandoc-output-type
+             "html5"))
+      (org-markdown-preview--websocket-send-msg-to-client
+       "html"
+       org-markdown-preview-markdown-current-html))))
+
+;;;###autoload
+(defun org-markdown-preview-websocket-send-ghub-html ()
+  "Send the refreshed Markdown content to the client via WebSocket."
+  (interactive)
+  (with-current-buffer org-markdown-preview-preview-buffer
+    (org-markdown-preview--refresh-buffer)
+    (when org-markdown-preview-md-content
+      (org-markdown-preview--ghub-md-to-html
+       org-markdown-preview-md-content
+       (lambda (value)
+         (setq org-markdown-preview-markdown-current-html
+               (org-markdown-preview-add-ids-to-links value))
+         (org-markdown-preview--websocket-send-msg-to-client
+          "html"
+          org-markdown-preview-markdown-current-html))))))
+
+(defun org-markdown-preview-refresh-buffer ()
+  "Org-Markdown-Preview."
+  (if org-markdown-preview-use-github-api
+      (org-markdown-preview-websocket-send-ghub-html)
+    (org-markdown-preview-websocket-send-html)))
 
 (defun org-markdown-preview-calc-size-percent ()
   "Calulate scroll percent relative to Emacs buffer.
@@ -296,7 +443,7 @@ The result is a floating number from 0 to 1, formatted to string."
 
 (defun org-markdown-preview-dispatch-scroll (value)
   "Scroll to the VALUE."
-  (org-markdown-preview-websocket-send-msg-to-client "scroll" value))
+  (org-markdown-preview--websocket-send-msg-to-client "scroll" value))
 
 (defun org-markdown-preview--scroll ()
   "Scroll preview page to the Emacs position in current buffer."
@@ -329,8 +476,9 @@ TIMER-SYM is a symbol to use as a timer."
 
 (defun org-markdown-preview-refresh ()
   "Refresh preview page.
-If value of `org-markdown-preview-refresh-delay' is nil,
-refresh immediately, othervise with delay."
+
+If value of `org-markdown-preview-refresh-delay' is nil, refresh immediately,
+othervise with delay."
   (if org-markdown-preview-refresh-delay
       (org-markdown-preview-debounce
        'org-markdown-preview-update-timer
@@ -340,7 +488,9 @@ refresh immediately, othervise with delay."
 
 (defun org-markdown-preview-scroll ()
   "Update scroll position in preview page after delay.
+
 Value for delay is stored in `org-markdown-preview-scroll-delay'.
+
 If it is nil, don's update position at all."
   (when org-markdown-preview-scroll-delay
     (org-markdown-preview-debounce 'org-markdown-preview-scroll-timer
@@ -349,7 +499,7 @@ If it is nil, don's update position at all."
 
 ;;;###autoload
 (defun org-markdown-preview-copy-markdown-as-org ()
-  "Copy markdown content as org format to clipboard."
+  "Copy the selected Markdown region as `org-mode' content."
   (interactive)
   (pcase-let* ((`(,beg . ,end)
                 (if (region-active-p)
@@ -367,7 +517,7 @@ If it is nil, don's update position at all."
 
 ;;;###autoload
 (defun org-markdown-preview-copy-org-as-markdown ()
-  "Copy the selected region or entire buffer from Org to Markdown format."
+  "Copy the selected `org-mode' region as Markdown content."
   (interactive)
   (pcase-let* ((`(,beg . ,end)
                 (if (region-active-p)
@@ -405,25 +555,43 @@ If it is nil, don's update position at all."
 
 (defvar org-markdown-preview-html-source-file
   (expand-file-name "markdown-preview.html" org-markdown-preview-data-root)
-  "Source file name or buffer for `httpd/skewer/demo' servlet.")
+  "The source file name for `httpd/org-markdown-preview' servlet.")
 
-(defun org-markdown-preview-servervlet-content ()
-  "Return content with serverlet."
+(defvar org-markdown-preview-html-source-file-gh
+  (expand-file-name "markdown-preview-gh.html"
+                    org-markdown-preview-data-root)
+  "The source file name for `httpd/org-markdown-preview-ghub' servlet.")
+
+(defun org-markdown-preview-servervlet-content (html-file)
+  "Return HTML-FILE content for serverlet."
   (let* ((default-port (format "%s" (eval (car (get
                                                 'org-markdown-preview-websocket-port
                                                 'standard-value)))))
          (port (format "%s" org-markdown-preview-websocket-port))
          (regex (regexp-opt (list default-port) 'symbols)))
     (with-temp-buffer
-      (insert-file-contents org-markdown-preview-html-source-file)
+      (insert-file-contents html-file)
       (goto-char (point-min))
       (while (re-search-forward regex nil t 1)
         (replace-match port))
       (buffer-string))))
 
+(defun org-markdown-preview-servervlet-pandoc-content ()
+  "Return the HTML content for `httpd/org-markdown-preview' servlet."
+  (org-markdown-preview-servervlet-content org-markdown-preview-html-source-file))
+
+(defun org-markdown-preview-markdown-it-servervlet-content ()
+  "Return the HTML content for `httpd/org-markdown-preview-ghub' serverlet."
+  (org-markdown-preview-servervlet-content
+   org-markdown-preview-html-source-file-gh))
+
 (defservlet org-markdown-preview
   "text/html; charset=UTF-8" ()
-  (insert (org-markdown-preview-servervlet-content)))
+  (insert (org-markdown-preview-servervlet-pandoc-content)))
+
+(defservlet org-markdown-preview-ghub
+  "text/html; charset=UTF-8" ()
+  (insert (org-markdown-preview-markdown-it-servervlet-content)))
 
 (defun org-markdown-preview-websockets-on-message (_websockets frame)
   "Handle websocket messages on the websocket FRAME struct."
@@ -431,8 +599,87 @@ If it is nil, don's update position at all."
       (let ((msg (websocket-frame-payload frame)))
         (pcase msg
           ("getHtml"
-           (org-markdown-preview-websocket-send-html))))
+           (org-markdown-preview-refresh-buffer))))
     (error (message "%s" err))))
+
+
+
+(defun org-markdown-preview--get-status-error (status)
+  "Display error details from GitHub code search status.
+
+Argument STATUS is a plist containing the status information, including any
+error details."
+  (when-let* ((err (plist-get status :error)))
+    (concat (propertize
+             "org-markdown-preview error: "
+             'face
+             'error)
+            (mapconcat (apply-partially #'format "%s")
+                       (delq nil
+                             (list (or
+                                    (when-let* ((type
+                                                 (ignore-errors
+                                                   (cadr
+                                                    err))))
+                                      type)
+                                    err)
+                                   (ignore-errors (caddr
+                                                   err))
+                                   (ignore-errors
+                                     (alist-get 'message
+                                                (car-safe
+                                                 (last
+                                                  err))))
+                                   (ignore-errors
+                                     (alist-get 'documentation_url
+                                                (car-safe
+                                                 (last
+                                                  err))))))
+                       " "))))
+
+(defun org-markdown-preview--decode-payload (&optional _status)
+  "Decode and return UTF-8 string from current buffer position to end."
+  (and (not (eobp))
+       (decode-coding-string
+        (buffer-substring-no-properties (point)
+                                        (point-max))
+        'utf-8)))
+
+
+(defun org-markdown-preview--ghub-md-to-html (text callback)
+  "Convert Markdown TEXT to HTML using GitHub API and execute CALLBACK.
+
+Argument TEXT is the markdown text to be converted to HTML.
+
+Argument CALLBACK is a function to be called with the HTML result."
+  (require 'ghub)
+  (ghub-post "/markdown" nil
+             :payload `((mode . gfm)
+                        (text . ,text))
+             :auth 'none
+             :reader #'org-markdown-preview--decode-payload
+             :headers `(("Accept" . "application/vnd.github+json"))
+             :callback
+             (lambda (value _headers status &rest _)
+               (if-let ((err
+                         (org-markdown-preview--get-status-error
+                          status)))
+                   (message err)
+                 (funcall callback value)))))
+
+(defun org-markdown-preview--on-open (ws)
+  "Handle WebSocket connection, send HTML, and scroll preview buffer.
+
+Argument WS is the WebSocket connection that has been opened."
+  (message "org-markdown-preview: opened")
+  (setq org-markdown-preview-websockets
+        (push ws org-markdown-preview-websockets))
+  (if org-markdown-preview-use-github-api
+      (org-markdown-preview-websocket-send-ghub-html)
+    (org-markdown-preview-websocket-send-html))
+  (when (buffer-live-p org-markdown-preview-preview-buffer)
+    (with-current-buffer org-markdown-preview-preview-buffer
+      (org-markdown-preview--scroll))))
 
 (defun org-markdown-preview-run-socket ()
   "Run websocket server on port `org-markdown-preview-websocket-port'."
@@ -443,14 +690,7 @@ If it is nil, don's update position at all."
          org-markdown-preview-websocket-port
          :host 'local
          :on-message 'org-markdown-preview-websockets-on-message
-         :on-open (lambda (ws)
-                    (message "org-markdown-preview: opened")
-                    (setq org-markdown-preview-websockets
-                          (push ws org-markdown-preview-websockets))
-                    (org-markdown-preview-websocket-send-html)
-                    (when (buffer-live-p org-markdown-preview-preview-buffer)
-                      (with-current-buffer org-markdown-preview-preview-buffer
-                        (org-markdown-preview--scroll))))
+         :on-open #'org-markdown-preview--on-open
          :on-close (lambda (ws)
                      (message "org-markdown-preview: closed")
                      (setq org-markdown-preview-websockets

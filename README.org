@@ -1,6 +1,8 @@
-A realtime ~markdown~ and ~org-mode~ preview in Emacs.
+A realtime =markdown= and =org-mode= preview for Emacs.
 
-[[./demo.gif][./demo.gif]]
+This package converts Org buffers to Markdown—using Pandoc—and then renders the resulting Markdown as HTML for live preview in your browser. It supports two conversion workflows: the default Pandoc conversion and an alternative GitHub API conversion (via ghub) for GitHub-Flavored Markdown.
+
+[[./demo.gif]]
 
 * Table of Contents                                       :TOC_2_gh:QUOTE:noexport:
 #+BEGIN_QUOTE
@@ -8,16 +10,23 @@ A realtime ~markdown~ and ~org-mode~ preview in Emacs.
   - [[#programs][Programs]]
   - [[#emacs-packages][Emacs Packages]]
 - [[#installation][Installation]]
-  - [[#with-use-package-and-straight][With ~use-package~ and ~straight~]]
+  - [[#with-use-package-and-straight][With use-package and straight]]
   - [[#manual-installation][Manual installation]]
 - [[#usage][Usage]]
 - [[#customization][Customization]]
 - [[#screenshots][Screenshots]]
-  - [[#org-mode][Org-mode]]
-  - [[#markdown-mode][Markdown-mode]]
+  - [[#org-mode-preview][Org-mode Preview]]
+  - [[#markdown-mode-preview][Markdown-mode Preview]]
 #+END_QUOTE
 
 * Requirements
+
+#+begin_quote
+[!IMPORTANT]
+
+Since the communication with Emacs is done through WebSockets, your browser must support JavaScript and WebSocket connections (for example, embedded Emacs Xwidget WebKit browser, Chrome, Firefox or Safari). Note that lightweight browsers without JavaScript support, such as Eww, will not work.
+#+end_quote
+
 ** Programs
 | Program | Version | Description                  |
 |---------+---------+------------------------------|
@@ -25,31 +34,36 @@ A realtime ~markdown~ and ~org-mode~ preview in Emacs.
 | Emacs   | >=28.1  | Editor                       |
 
 ** Emacs Packages
-| Package      | Version  | Description                     |
-|--------------+----------+---------------------------------|
-| [[https://github.com/skeeto/emacs-http-server][simple-httpd]] | >= 0.4.0 | A simple Emacs web server.      |
-| [[https://github.com/ahyatt/emacs-websocket][websocket]]    | >= 1.14  | A library for websocket clients |
+| Package      | Version | Description                                     |
+|--------------+---------+-------------------------------------------------|
+| [[https://github.com/skeeto/emacs-http-server][simple-httpd]] | >=1.5.1 | A simple Emacs web server                       |
+| [[https://github.com/ahyatt/emacs-websocket][websocket]]    | >=1.15  | Websockets for Emacs                            |
+| [[https://github.com/ubolonton/ghub][ghub]]         | Latest  | GitHub API client (for alternative HTML render) |
 
 * Installation
 
-** With ~use-package~ and ~straight~
+** With use-package and straight
+
+Using straight.el you can install the package with:
+
 #+begin_src elisp :eval no
 (use-package org-markdown-preview
   :straight (:repo "KarimAziev/org-markdown-preview"
-                   :type git
-                   :host github
-                   :files ("*.html" "*.el")))
+             :type git
+             :host github
+             :files ("*.el" "*.html"))
+  :commands (org-markdown-preview-mode))
 #+end_src
 
 ** Manual installation
 
-Download the source code and put it wherever you like, e.g. into =~/.emacs.d/org-markdown-preview/=
+Download the source code and put it wherever you like, for example into your =~/.emacs.d/org-markdown-preview/= directory:
 
 #+begin_src shell :eval no
 git clone https://github.com/KarimAziev/org-markdown-preview.git ~/.emacs.d/org-markdown-preview/
 #+end_src
 
-Add the downloaded directory to the load path:
+Then add the downloaded directory to your load path and require the package:
 
 #+begin_src elisp :eval no
 (add-to-list 'load-path "~/.emacs.d/org-markdown-preview/")
@@ -58,34 +72,50 @@ Add the downloaded directory to the load path:
 
 * Usage
 
-~M-x org-markdown-preview-mode RET~
+To start the live preview in an Org-mode or Markdown buffer simply enable the minor mode:
 
-Run it in ~org-mode~ or ~markdown~ buffers.
+~M-x org-markdown-preview-mode RET~
 
 In ~org-mode~ to see and write markdown result, you can use command:
 
-~M-x org-markdown-preview-markdown-write~.
+~M-x org-markdown-preview-mode RET~.
+
+There are also a couple of additional commands for copying:
+- ~org-markdown-preview-copy-markdown-as-org~: Copies the selected Markdown region as `org-mode` content.
+- ~org-markdown-preview-copy-org-as-markdown~: Copies the selected `org-mode` region as Markdown content.
 
 * Customization
 
-*** ~org-markdown-preview-websocket-port~
-Websocket port.
-*** ~org-markdown-preview-browse-fn~
-Function for browsing preview page. It will be called with one argument - url to open. Default value is to use xwidgets if available, othervise =browse-url=.
-*** ~org-markdown-preview-refresh-delay~
-How many seconds to wait after running hooks before refreshing content. If nil, refresh after imediatelly after running =org-markdown-preview-refresh-behavior=
-*** ~org-markdown-preview-refresh-behavior~
-When to refresh preview page. It should be a name of a hook (a symbol) where should refresh handler be added.
-*** ~org-markdown-preview-pandoc-options~
-Extra pandoc options.
-*** ~org-markdown-preview-scroll-delay~
-How many seconds to wait after last command before scroll sync. If nil, inhibit scroll sync at all.
-*** ~org-markdown-preview-pandoc-output-type~
-Markdown output type for =pandoc=.
+Several settings let you fine-tune the conversion and preview experience. Some of the key customization options are:
+
+- ~org-markdown-preview-use-github-api~
+  When non-nil (the default), the rendered HTML is generated via GitHub’s API. Otherwise, it uses Pandoc for the conversion.
+
+- ~org-markdown-preview-websocket-port~
+  The port on which the WebSocket server will run.
+
+- ~org-markdown-preview-browse-fn~
+  Function for browsing the preview page. By default it tries to use xwidgets if available, falling back to `browse-url`.
+
+- ~org-markdown-preview-refresh-behavior~
+  Determines when the preview is refreshed. Its value should be the name of a hook (for example, `after-save-hook` or `post-self-insert-hook`).
+
+- ~org-markdown-preview-refresh-delay~
+  Delay (in seconds) before the preview is refreshed after running the refresh hook. If nil, the update happens immediately.
+
+- ~org-markdown-preview-pandoc-options~
+  Extra options to pass to Pandoc during the conversion.
+
+- ~org-markdown-preview-scroll-delay~
+  Delay (in seconds) after the last command before synchronizing the scroll position between Emacs and the preview.
+
+- ~org-markdown-preview-pandoc-output-type~
+  Specifies which flavor of Markdown to produce (e.g. “gfm”, “markdown”, “markdown_mmd” etc.).
+
 * Screenshots
-** Org-mode
+
+** Org-mode Preview
 [[./demo-org.png]]
 
-** Markdown-mode
+** Markdown-mode Preview
 [[./demo-markdown.png]]
-
