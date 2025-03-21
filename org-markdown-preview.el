@@ -654,7 +654,7 @@ Argument TEXT is the markdown text to be converted to HTML.
 Argument CALLBACK is a function to be called with the HTML result."
   (require 'ghub)
   (ghub-post "/markdown" nil
-             :payload `((mode . gfm)
+             :payload `((mode . "gfm")
                         (text . ,text))
              :auth 'none
              :reader #'org-markdown-preview--decode-payload
