@@ -34,11 +34,11 @@ Since the communication with Emacs is done through WebSockets, your browser must
 | Emacs   | >=28.1  | Editor                       |
 
 ** Emacs Packages
-| Package      | Version | Description                                     |
-|--------------+---------+-------------------------------------------------|
-| [[https://github.com/skeeto/emacs-http-server][simple-httpd]] | >=1.5.1 | A simple Emacs web server                       |
-| [[https://github.com/ahyatt/emacs-websocket][websocket]]    | >=1.15  | Websockets for Emacs                            |
-| [[https://github.com/ubolonton/ghub][ghub]]         | Latest  | GitHub API client (for alternative HTML render) |
+| Package          | Version | Description                                     |
+|------------------+---------+-------------------------------------------------|
+| [[https://github.com/skeeto/emacs-http-server][simple-httpd]]     | >=1.5.1 | A simple Emacs web server                       |
+| [[https://github.com/ahyatt/emacs-websocket][websocket]]        | >=1.15  | Websockets for Emacs                            |
+| [[https://github.com/magit/ghub][ghub]]  (optional) | Latest  | GitHub API client (for alternative HTML render) |
 
 * Installation
 
