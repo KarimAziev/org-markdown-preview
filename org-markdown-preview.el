@@ -97,7 +97,7 @@ If nil, inhibit scroll sync at all."
 (defcustom org-markdown-preview-pandoc-options '("--quiet"
                                                  "--embed-resources"
                                                  "--standalone"
-                                                 "--highlight-style=zenburn"
+                                                 "--syntax-highlighting=zenburn"
                                                  "--wrap=none")
   "Extra pandoc options."
   :group 'org-markdown-preview
