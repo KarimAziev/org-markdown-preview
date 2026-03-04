@@ -552,6 +552,24 @@ If it is nil, don's update position at all."
     content))
 
 ;;;###autoload
+(defun org-markdown-preview-copy-html-as-org ()
+  "Copy the selected `html' region as org content."
+  (interactive)
+  (pcase-let* ((`(,beg . ,end)
+                (if (region-active-p)
+                    (cons (region-beginning)
+                          (region-end))
+                  (cons (point-min)
+                        (point-max))))
+               (content (org-markdown-preview-pandoc-from-string
+                         (buffer-substring-no-properties beg end)
+                         "html"
+                         "org")))
+    (kill-new content)
+    (message "Copied as org")
+    content))
+
+;;;###autoload
 (defun org-markdown-preview-markdown-write ()
   "Write markdown content to a file if conditions are met."
   (interactive)
