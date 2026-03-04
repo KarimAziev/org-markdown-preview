@@ -497,77 +497,65 @@ If it is nil, don's update position at all."
                                    org-markdown-preview-scroll-delay
                                    #'org-markdown-preview--scroll)))
 
+
+(defun org-markdown-preview--get-region ()
+  "Return region bounds if active, otherwise return whole buffer bounds."
+  (if (region-active-p)
+      (cons (region-beginning)
+            (region-end))
+    (cons (point-min)
+          (point-max))))
+
+(defun org-markdown-preview--copy-region-as (input-format out-format)
+  "Convert the region between formats and copy the result to the clipboard.
+
+Argument INPUT-FORMAT is a pandoc input format string.
+
+Argument OUT-FORMAT is a pandoc output format string."
+  (pcase-let* ((`(,beg . ,end)
+                (org-markdown-preview--get-region))
+               (str (buffer-substring-no-properties beg end))
+               (content (if (string-empty-p (string-trim str))
+                            (user-error "The selected region is empty")
+                          (org-markdown-preview-pandoc-from-string
+                           str
+                           input-format
+                           out-format))))
+    (kill-new content)
+    (message "Copied `%s' region as `%s'" input-format out-format)
+    content))
+
 ;;;###autoload
 (defun org-markdown-preview-copy-markdown-as-org ()
   "Copy the selected Markdown region as `org-mode' content."
   (interactive)
-  (pcase-let* ((`(,beg . ,end)
-                (if (region-active-p)
-                    (cons (region-beginning)
-                          (region-end))
-                  (cons (point-min)
-                        (point-max))))
-               (content (org-markdown-preview-pandoc-from-string
-                         (buffer-substring-no-properties beg end)
-                         org-markdown-preview-pandoc-output-type
-                         "org")))
-    (kill-new content)
-    (message "Copied as org")
-    content))
+  (org-markdown-preview--copy-region-as
+   org-markdown-preview-pandoc-output-type
+   "org"))
 
 ;;;###autoload
 (defun org-markdown-preview-copy-org-as-markdown ()
   "Copy the selected `org-mode' region as Markdown content."
   (interactive)
-  (pcase-let* ((`(,beg . ,end)
-                (if (region-active-p)
-                    (cons (region-beginning)
-                          (region-end))
-                  (cons (point-min)
-                        (point-max))))
-               (content (org-markdown-preview-pandoc-from-string
-                         (buffer-substring-no-properties beg end)
-                         "org"
-                         org-markdown-preview-pandoc-output-type)))
-    (kill-new content)
-    (message "Copied as markdown")
-    content))
+  (org-markdown-preview--copy-region-as
+   "org"
+   org-markdown-preview-pandoc-output-type))
 
 ;;;###autoload
 (defun org-markdown-preview-copy-html-as-markdown ()
   "Copy the selected `html' region as Markdown content."
   (interactive)
-  (pcase-let* ((`(,beg . ,end)
-                (if (region-active-p)
-                    (cons (region-beginning)
-                          (region-end))
-                  (cons (point-min)
-                        (point-max))))
-               (content (org-markdown-preview-pandoc-from-string
-                         (buffer-substring-no-properties beg end)
-                         "html"
-                         org-markdown-preview-pandoc-output-type)))
-    (kill-new content)
-    (message "Copied as markdown")
-    content))
+  (org-markdown-preview--copy-region-as
+   "html"
+   org-markdown-preview-pandoc-output-type))
 
 ;;;###autoload
 (defun org-markdown-preview-copy-html-as-org ()
   "Copy the selected `html' region as org content."
   (interactive)
-  (pcase-let* ((`(,beg . ,end)
-                (if (region-active-p)
-                    (cons (region-beginning)
-                          (region-end))
-                  (cons (point-min)
-                        (point-max))))
-               (content (org-markdown-preview-pandoc-from-string
-                         (buffer-substring-no-properties beg end)
-                         "html"
-                         "org")))
-    (kill-new content)
-    (message "Copied as org")
-    content))
+  (org-markdown-preview--copy-region-as
+   "html"
+   "org"))
 
 ;;;###autoload
 (defun org-markdown-preview-markdown-write ()
@@ -697,9 +685,9 @@ Argument CALLBACK is a function to be called with the HTML result."
              :headers `(("Accept" . "application/vnd.github+json"))
              :callback
              (lambda (value _headers status &rest _)
-               (if-let ((err
-                         (org-markdown-preview--get-status-error
-                          status)))
+               (if-let* ((err
+                          (org-markdown-preview--get-status-error
+                           status)))
                    (message err)
                  (funcall callback value)))))
 
