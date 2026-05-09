@@ -241,7 +241,7 @@ Uses `browse-url' to launch a browser"
     (goto-char (point-min))
     (let ((case-fold-search t))
       (while (re-search-forward
-              ":PROPERTIES:[\n]+[\s\t]+:CUSTOM_ID:[\s\t][^\n]+[\n]+[\s\t]+:END:[\n]"
+              ":properties:[\n]+[\s\t]*:custom_id:\\([\s\t]\\)*[^\n]+[\n]+[\s\t]*:end:[\n]"
               nil t
               1)
         (replace-match "")))))
