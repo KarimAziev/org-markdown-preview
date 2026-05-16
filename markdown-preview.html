@@ -3,21 +3,23 @@
   <title>Markdown preview</title>
   <link
     rel="stylesheet"
-    href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/3.0.1/github-markdown.min.css" />
+    href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/3.0.1/github-markdown.min.css"
+  />
   <link
     rel="stylesheet"
-    href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.5.1/styles/default.min.css" />
+    href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.5.1/styles/default.min.css"
+  />
   <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.5.1/highlight.min.js"></script>
   <script type="text/javascript">
-    document.addEventListener('DOMContentLoaded', (event) => {
-      document.querySelectorAll('pre code').forEach((el) => {
+    document.addEventListener("DOMContentLoaded", (event) => {
+      document.querySelectorAll("pre code").forEach((el) => {
         hljs.highlightElement(el);
       });
     });
   </script>
 
   <script type="text/javascript">
-    document.addEventListener('DOMContentLoaded', (event) => {
+    document.addEventListener("DOMContentLoaded", (event) => {
       class WSBridge {
         constructor(port, actions, initialQueue = []) {
           this.actions = actions;
@@ -37,7 +39,7 @@
         makeWS(port = 7071) {
           const ws = new WebSocket(`ws://localhost:${port}`);
           ws.onopen = () => {
-            console.log('on open', this.queue);
+            console.log("Connected");
             while (this.queue.length > 0) {
               ws.send(this.queue.shift());
             }
@@ -46,15 +48,12 @@
             const action = JSON.parse(wsMsg.data);
             const actionType = action.type;
             const handler = this.actions[actionType];
-            if (typeof handler === 'function') {
+            if (typeof handler === "function") {
               handler(action.payload);
             }
           };
           ws.onclose = (evt) => {
-            console.log('evt:', {
-              type: 'closed',
-              payload: { code: evt.code, reason: evt.reason },
-            });
+            console.log("WSBridge websocket closed with code", evt.code);
           };
           return ws;
         }
@@ -63,7 +62,6 @@
           msg = JSON.stringify(msg);
           if (this.ws.readyState === this.ws.CONNECTING) {
             this.queue.push(msg);
-            console.log('queueing message', this.queue);
           } else if (this.ws.readyState === this.ws.OPEN) {
             this.ws.send(msg);
           }
@@ -74,8 +72,7 @@
         7071,
         {
           html(payload) {
-            console.log('refresh payload', payload);
-            const elem = document.querySelector('article.markdown-body');
+            const elem = document.querySelector("article.markdown-body");
 
             if (elem) {
               elem.innerHTML = payload;
@@ -83,16 +80,15 @@
             hljs.highlightAll();
           },
           scroll(scrollYPercent) {
-            console.log('scrollYPercent', scrollYPercent);
             window.scrollTo(
               0,
               document.documentElement.scrollHeight * scrollYPercent,
             );
           },
         },
-        ['getHtml'],
+        ["getHtml"],
       );
-      bridge.send('getHtml');
+      bridge.send("getHtml");
     });
   </script>
   <body style="max-width: 100%">
@@ -104,6 +100,7 @@
         box-sizing: border-box;
         margin: 0 auto;
         padding: 45px;
-      "></article>
+      "
+    ></article>
   </body>
 </html>

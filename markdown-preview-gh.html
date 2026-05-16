@@ -3,9 +3,10 @@
   <title>Markdown preview</title>
   <link
     rel="stylesheet"
-    href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.8.1/github-markdown.css" />
+    href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.8.1/github-markdown.css"
+  />
   <script type="text/javascript">
-    document.addEventListener('DOMContentLoaded', (event) => {
+    document.addEventListener("DOMContentLoaded", (event) => {
       class WSBridge {
         constructor(port, actions, initialQueue = []) {
           this.actions = actions;
@@ -25,7 +26,7 @@
         makeWS(port = 7071) {
           const ws = new WebSocket(`ws://localhost:${port}`);
           ws.onopen = () => {
-            console.log('on open', this.queue);
+            console.log("Connected");
             while (this.queue.length > 0) {
               ws.send(this.queue.shift());
             }
@@ -34,15 +35,12 @@
             const action = JSON.parse(wsMsg.data);
             const actionType = action.type;
             const handler = this.actions[actionType];
-            if (typeof handler === 'function') {
+            if (typeof handler === "function") {
               handler(action.payload);
             }
           };
           ws.onclose = (evt) => {
-            console.log('evt:', {
-              type: 'closed',
-              payload: { code: evt.code, reason: evt.reason },
-            });
+            console.log("WSBridge websocket closed with code", evt.code);
           };
           return ws;
         }
@@ -61,42 +59,40 @@
         7071,
         {
           html(payload) {
-            console.log('html payload', payload);
-            const elem = document.querySelector('.md-wrapper');
+            const elem = document.querySelector(".md-wrapper");
 
             if (elem) {
               elem.innerHTML = payload;
               elem.querySelectorAll('a[href^="#"]').forEach((anchor) => {
-                anchor.addEventListener('click', (e) => {
+                anchor.addEventListener("click", (e) => {
                   e.preventDefault();
-                  const targetId = anchor.getAttribute('href').substring(1);
+                  const targetId = anchor.getAttribute("href").substring(1);
                   const targetElem = document.getElementById(targetId);
                   if (targetElem) {
                     targetElem.scrollIntoView({
-                      behavior: 'smooth',
-                      block: 'start',
+                      behavior: "smooth",
+                      block: "start",
                     });
                   }
                 });
               });
             }
 
-            const preloader = document.getElementById('preloader');
+            const preloader = document.getElementById("preloader");
             if (preloader) {
-              preloader.style.display = 'none';
+              preloader.style.display = "none";
             }
           },
           scroll(scrollYPercent) {
-            console.log('scrollYPercent', scrollYPercent);
             window.scrollTo(
               0,
               document.documentElement.scrollHeight * scrollYPercent,
             );
           },
         },
-        ['getHtml'],
+        ["getHtml"],
       );
-      bridge.send('getHtml');
+      bridge.send("getHtml");
     });
   </script>
   <style>
