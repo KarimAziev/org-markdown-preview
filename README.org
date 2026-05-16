@@ -1,9 +1,7 @@
-A real-time =markdown= and =org-mode= preview for Emacs.
+This package provides a minor mode for real-time preview of Org mode and Markdown files. It also provides commands for converting and copying text.
 
-This package converts Org buffers to Markdown with Pandoc and then renders the
-resulting Markdown as HTML for live preview in your browser. It supports two
-rendering workflows: local Pandoc conversion and an alternative GitHub API
-conversion (via =ghub=) for GitHub-Flavored Markdown.
+It supports two rendering workflows: local Pandoc conversion and an alternative GitHub API conversion
+(via =ghub=) for GitHub-Flavored Markdown.
 
 [[./demo.gif]]
 
