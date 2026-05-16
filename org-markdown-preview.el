@@ -137,6 +137,44 @@ If nil, refresh immediately after `org-markdown-preview-refresh-behavior' runs."
                  (number
                   :tag "Seconds")))
 
+(defcustom org-markdown-preview-gh-auth nil
+  "GitHub authentication for GitHub API preview rendering.
+
+Nil means use GitHub's Markdown API without authentication.
+
+A cons cell (USERNAME . AUTH) authenticates as USERNAME.  AUTH may be
+an explicit GitHub OAuth token string, or a symbol suffix used by
+`ghub' to look up USERNAME^AUTH in `auth-sources'.
+
+For example, with (\"octocat\" . org-markdown-preview), add an
+auth-source entry like:
+
+  machine api.github.com login octocat^org-markdown-preview password TOKEN
+
+A function value is called with no arguments and should return the same
+kind of cons cell.
+
+If previewing reports \"org-markdown-preview error: http 403\" while
+`org-markdown-preview-use-github-api' is non-nil, configure this option
+or disable GitHub API rendering."
+  :group 'org-markdown-preview
+  :type
+  '(radio
+    (const :tag "Don't use auth" nil)
+    (cons
+     :value ("" . org-markdown-preview)
+     (string :tag "Username")
+     (radio
+      (symbol
+       :tag "Suffix"
+       :doc
+       "Symbol suffix used by `ghub' to look up USERNAME^AUTH in `auth-sources'")
+      (string :tag "OAuth Token")))
+    (function
+     :tag "Custom function"
+     :doc
+     "Custom function called without args that should return (USERNAME . AUTH)")))
+
 
 (defcustom org-markdown-preview-browse-fn (if (and window-system
                                                    (featurep 'xwidget-internal))
@@ -673,25 +711,38 @@ error details."
 
 
 (defun org-markdown-preview--ghub-md-to-html (text callback)
-  "Convert Markdown TEXT to HTML with the GitHub API, then run CALLBACK.
+  "Convert Markdown TEXT to HTML with the GitHub Markdown API.
 
-Argument TEXT is the markdown text to be converted to HTML.
+Run CALLBACK with the returned HTML string when conversion succeeds.
+Authentication is controlled by `org-markdown-preview-gh-auth'.  When
+GitHub returns an error, report it in the echo area instead of calling
+CALLBACK.
 
-Argument CALLBACK is a function to be called with the HTML result."
+Argument TEXT is the Markdown text to convert.
+
+Argument CALLBACK is a function called with the HTML result."
   (require 'ghub)
-  (ghub-post "/markdown" nil
-             :payload `((mode . "gfm")
-                        (text . ,text))
-             :auth 'none
-             :reader #'org-markdown-preview--decode-payload
-             :headers `(("Accept" . "application/vnd.github+json"))
-             :callback
-             (lambda (value _headers status &rest _)
-               (if-let* ((err
-                          (org-markdown-preview--get-status-error
-                           status)))
-                   (message err)
-                 (funcall callback value)))))
+  (pcase-let
+      ((`(,user-name . ,token)
+        (cond ((functionp org-markdown-preview-gh-auth)
+               (funcall
+                org-markdown-preview-gh-auth))
+              (t org-markdown-preview-gh-auth))))
+    (ghub-post "/markdown" nil
+               :username user-name
+               :auth (or token 'none)
+               :payload `((mode . "gfm")
+                          (text . ,text))
+               :auth 'none
+               :reader #'org-markdown-preview--decode-payload
+               :headers `(("Accept" . "application/vnd.github+json"))
+               :callback
+               (lambda (value _headers status &rest _)
+                 (if-let* ((err
+                            (org-markdown-preview--get-status-error
+                             status)))
+                     (message err)
+                   (funcall callback value))))))
 
 (defun org-markdown-preview--on-open (ws)
   "Handle WebSocket connection, send HTML, and scroll preview buffer.

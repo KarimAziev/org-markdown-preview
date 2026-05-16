@@ -16,6 +16,10 @@ It supports two rendering workflows: local Pandoc conversion and an alternative 
     - [[#elpaca][elpaca]]
   - [[#manual-installation][Manual installation]]
 - [[#usage][Usage]]
+- [[#github-api-authentication][GitHub API authentication]]
+    - [[#obtaining-a-github-token][Obtaining a GitHub token]]
+    - [[#secure-way-using-auth-sources][Secure Way: Using auth-sources]]
+    - [[#insecure-way][Insecure way]]
 - [[#customization][Customization]]
 - [[#screenshots][Screenshots]]
   - [[#org-mode-preview][Org-mode Preview]]
@@ -107,6 +111,7 @@ Then add that directory to your load path and require the package:
 
 This setup works as-is because Emacs loads the package directly from the source directory, where the required HTML files are already present.
 
+
 * Usage
 
 To start the live preview, enable the minor mode in an Org or Markdown buffer:
@@ -127,6 +132,84 @@ The package also provides helper commands for copying converted content:
 - ~org-markdown-preview-copy-html-as-org~: Copies the selected HTML region as =org-mode= content.
 - ~org-markdown-preview-copy-html-as-markdown~: Copies the selected HTML region as Markdown content.
 
+
+* GitHub API authentication
+
+When =org-markdown-preview-use-github-api= is non-nil (the default), the
+preview uses GitHub's Markdown API through =ghub=. GitHub allows unauthenticated
+requests, but they are rate-limited. If you see:
+
+#+begin_example
+org-markdown-preview error: http 403
+#+end_example
+
+you likely want to configure =org-markdown-preview-gh-auth= or disable GitHub
+API rendering by setting =org-markdown-preview-use-github-api= to nil.
+
+The value of =org-markdown-preview-gh-auth= can be:
+- nil, to use the GitHub API without authentication.
+- A cons cell =(USERNAME . AUTH)=, where =AUTH= is either a GitHub OAuth token
+  string or a symbol suffix for an entry in =auth-sources=.
+- A function called with no arguments that returns the same =(USERNAME . AUTH)=
+  cons cell.
+
+*** Obtaining a GitHub token
+
+Firstly, create a [[https://github.com/settings/tokens][GitHub personal access token]] for the GitHub Markdown API.
+GitHub recommends fine-grained personal access tokens where possible.
+
+1. Log in to GitHub and open [[https://github.com/settings/tokens][Developer settings -> Personal access tokens]].
+2. Create a fine-grained token, or a classic token if that is what your setup
+   requires.
+3. Give the token a descriptive name, such as =org-markdown-preview=, and choose
+   an expiration.
+4. For normal public Markdown rendering, no broad repository permissions are
+   needed. If you use a fine-grained token and render Markdown that references
+   private repository resources, grant the minimum repository access needed,
+   typically =Contents: read= for the selected repository.
+5. Generate the token and copy it immediately; GitHub will not show it again.
+
+After getting your token, supply it to =org-markdown-preview= in one of these
+ways.
+
+*** Secure Way: Using auth-sources
+
+Emacs =auth-sources= provide a secure way to store your GitHub username and
+OAuth token.
+
+Use a symbol as the cdr of =org-markdown-preview-gh-auth=:
+
+#+begin_src elisp :eval no
+(setq org-markdown-preview-gh-auth
+      '("GITHUB_USERNAME" . org-markdown-preview))
+#+end_src
+
+Then add an entry like this to your auth source file, such as =~/.authinfo.gpg=:
+
+#+begin_example
+machine api.github.com login GITHUB_USERNAME^org-markdown-preview password GITHUB_TOKEN
+#+end_example
+
+The symbol is used as the suffix after =^= in the =login= field. You can store
+this entry in =~/.authinfo.gpg=, which is recommended for encrypted storage, or
+in another file listed in the Emacs variable =auth-sources=.
+
+*** Insecure way
+
+While not recommended due to security issues, you can set the token directly in
+your Emacs configuration:
+
+#+begin_src elisp :eval no
+(setq org-markdown-preview-gh-auth
+      '("GITHUB_USERNAME" . "GITHUB_TOKEN"))
+#+end_src
+
+This stores your OAuth token as plain text in your Emacs config file. Prefer
+=auth-sources= unless you have a specific reason to keep the token inline.
+
+
+
+
 * Customization
 
 Several settings let you fine-tune the conversion and preview experience. Some
@@ -135,6 +218,11 @@ of the most useful options are:
 - ~org-markdown-preview-use-github-api~
   When non-nil (the default), HTML is rendered through GitHub's Markdown API.
   Otherwise, Pandoc is used locally.
+
+- ~org-markdown-preview-gh-auth~
+  Authentication used when rendering through GitHub's Markdown API. Configure
+  this with a GitHub OAuth token or an =auth-sources= suffix if unauthenticated
+  requests fail with =org-markdown-preview error: http 403=.
 
 - ~org-markdown-preview-websocket-port~
   The port on which the WebSocket server will run.
