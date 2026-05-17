@@ -31,9 +31,9 @@ It supports two rendering workflows: local Pandoc conversion and an alternative 
 #+begin_quote
 [!IMPORTANT]
 
-Because communication with Emacs happens over WebSockets, your browser must
-support both JavaScript and WebSocket connections. Supported browsers include
-the Emacs Xwidget WebKit browser, Chrome, Firefox, and Safari. Lightweight
+Since the communication with Emacs is done through WebSockets, your browser must
+support JavaScript and WebSocket connections (for example, embedded Emacs
+Xwidget WebKit browser, Chrome, Firefox or Safari). Note that lightweight
 browsers without JavaScript support, such as Eww, will not work.
 #+end_quote
 
@@ -55,10 +55,12 @@ browsers without JavaScript support, such as Eww, will not work.
 #+begin_quote
 [!NOTE]
 
-This package also needs the bundled HTML files used for preview rendering. If
+The package includes the bundled HTML files used for preview rendering. If
 you install it with a package manager that builds or copies files into a
-separate directory, make sure your recipe includes them. Alternatively, point
-to those files manually by setting =org-markdown-preview-html-source-file= and =org-markdown-preview-html-source-file-gh=.
+separate directory, make sure your recipe includes them too.
+
+In other words, =markdown-preview.html= and =markdown-preview-gh.html= need to be in the same
+directory as =org-markdown-preview.elc=.
 #+end_quote
 
 ** With use-package
@@ -73,11 +75,7 @@ With =straight.el=, you can install the package like this:
              :type git
              :host github
              :files ("*.el" "*.html"))
-  :commands (org-markdown-preview-mode
-             org-markdown-preview-copy-org-as-markdown
-             org-markdown-preview-copy-markdown-as-org
-             org-markdown-preview-copy-html-as-org
-             org-markdown-preview-copy-html-as-markdown))
+  :commands (org-markdown-preview-mode))
 #+end_src
 
 *** elpaca
@@ -85,12 +83,8 @@ With =straight.el=, you can install the package like this:
 #+begin_src elisp :eval no
 (use-package org-markdown-preview
   :ensure (:repo "https://github.com/KarimAziev/org-markdown-preview"
-           :files ("*.el" "*.html"))
-  :commands (org-markdown-preview-mode
-             org-markdown-preview-copy-org-as-markdown
-             org-markdown-preview-copy-markdown-as-org
-             org-markdown-preview-copy-html-as-org
-             org-markdown-preview-copy-html-as-markdown))
+                 :files ("*.el" "*.html"))
+  :commands (org-markdown-preview-mode))
 #+end_src
 
 ** Manual installation
