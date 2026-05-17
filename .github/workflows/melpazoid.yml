@@ -22,7 +22,7 @@ jobs:
       env:
         LOCAL_REPO: ${{ github.workspace }}
         # RECIPE is your recipe as written for MELPA:
-        RECIPE: (org-markdown-preview :fetcher github :repo "KarimAziev/org-markdown-preview")
+        RECIPE: (org-markdown-preview :fetcher github :repo "KarimAziev/org-markdown-preview" :files ("*.el" "*.html")
         # set this to true if warnings should be treated as errors:
         WARN_IS_ERROR: false
         # set this to false (or remove it) if the package isn't on MELPA:
