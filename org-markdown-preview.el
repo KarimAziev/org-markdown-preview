@@ -328,10 +328,12 @@ Pandoc otherwise converts `emacs-lisp' to `commonlisp' in Markdown output."
       (insert string)
       (pcase input-type
         ("org" (run-hooks 'org-markdown-preview-preprocess-org-content-hook)))
-      (let ((status
-             (apply #'call-process-region (append (list (point-min)
-                                                        (point-max))
-                                                  args))))
+      (let* ((coding-system-for-read 'utf-8-unix)
+             (coding-system-for-write 'utf-8-unix)
+             (status
+              (apply #'call-process-region (append (list (point-min)
+                                                         (point-max))
+                                                   args))))
         (when (and (numberp status)
                    (zerop status))
           (pcase output-type
@@ -611,11 +613,12 @@ Argument OUT-FORMAT is a pandoc output format string."
     (unless file
       (user-error
        "org-markdown-preview: `org-markdown-preview--preview-buffer' is not visiting a file"))
-    (write-region org-markdown-preview-md-content nil
-                  (concat (file-name-sans-extension
-                           file)
-                          ".md")
-                  nil)))
+    (let ((coding-system-for-write 'utf-8-unix))
+      (write-region org-markdown-preview-md-content nil
+                    (concat (file-name-sans-extension
+                             file)
+                            ".md")
+                    nil))))
 
 (defvar org-markdown-preview-html-source-file
   (expand-file-name "markdown-preview.html" org-markdown-preview-data-root)
