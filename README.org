@@ -3,7 +3,7 @@ This package provides a minor mode for real-time preview of Org mode and Markdow
 It supports two rendering workflows: local Pandoc conversion and an alternative GitHub API conversion
 (via =ghub=) for GitHub-Flavored Markdown.
 
-[[./org-markdown-preview-gemo.gif]]
+[[./demo-org-markdown-preview.gif]]
 
 * Table of Contents                                       :TOC_3_gh:QUOTE:noexport:
 #+BEGIN_QUOTE
