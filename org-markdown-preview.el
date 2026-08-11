@@ -736,7 +736,6 @@ Argument CALLBACK is a function called with the HTML result."
                :auth (or token 'none)
                :payload `((mode . "gfm")
                           (text . ,text))
-               :auth 'none
                :reader #'org-markdown-preview--decode-payload
                :headers `(("Accept" . "application/vnd.github+json"))
                :callback
