@@ -1,4 +1,7 @@
-This package provides a minor mode for real-time preview of Org mode and Markdown files. It also provides commands for converting and copying text.
+This package provides a minor mode for real-time preview of Org mode and
+Markdown files. Both =markdown-mode= and =markdown-ts-mode= are supported.
+
+It also provides commands for converting and copying text.
 
 It supports two rendering workflows: local Pandoc conversion and an alternative GitHub API conversion
 (via =ghub=) for GitHub-Flavored Markdown.
@@ -108,13 +111,15 @@ This setup works as-is because Emacs loads the package directly from the source 
 
 * Usage
 
-To start the live preview, enable the minor mode in an Org or Markdown buffer:
+To start the live preview, enable the minor mode in an =org-mode=,
+=markdown-mode=, or =markdown-ts-mode= buffer:
 
 ~M-x org-markdown-preview-mode RET~
 
 In =org-mode=, the mode converts the current buffer to Markdown and refreshes
-the browser preview automatically. In Markdown buffers, it previews the current
-buffer content directly.
+the browser preview automatically. In =markdown-mode= and =markdown-ts-mode=
+buffers (including their derived modes), it previews the current buffer content
+directly.
 
 The package also provides helper commands for copying converted content:
 - ~org-markdown-preview-browse-preview~: Opens the preview page again if you

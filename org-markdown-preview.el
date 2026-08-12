@@ -1,4 +1,4 @@
-;;; org-markdown-preview.el --- Preview Markdown from Org or Markdown buffers -*- lexical-binding: t; -*-
+;;; org-markdown-preview.el --- Preview Org and Markdown buffers -*- lexical-binding: t; -*-
 
 ;; Copyright (C) 2022-2026 Karim Aziiev <karim.aziiev@gmail.com>
 
@@ -26,12 +26,14 @@
 
 ;;; Commentary:
 
-;; Live preview of Org and Markdown buffers in a web browser.
+;; Live preview of Org, `markdown-mode', and `markdown-ts-mode' buffers in a web
+;; browser.
 
 ;;; Commands
 
 ;; M-x `org-markdown-preview-mode'
-;;      Enable live preview for the current Org or Markdown buffer.
+;;      Enable live preview for the current Org, `markdown-mode', or
+;;      `markdown-ts-mode' buffer.
 
 ;; M-x `org-markdown-preview-browse-preview'
 ;;      Open the preview page in a browser again.
@@ -285,6 +287,33 @@ temporary buffer before the converted content is returned."
 (defvar org-markdown-preview-md-content nil
   "Most recently generated Markdown content for the preview buffer.")
 
+(defconst org-markdown-preview--markdown-file-extensions
+  '("md" "markdown" "mkd" "mdown" "mkdn" "mdwn" "mdx")
+  "File extensions treated as Markdown when no Markdown mode is active.")
+
+(defun org-markdown-preview--org-buffer-p ()
+  "Return non-nil when the current buffer contains Org content."
+  (or (derived-mode-p 'org-mode)
+      (and buffer-file-name
+           (equal "org" (downcase (or (file-name-extension buffer-file-name)
+                                       ""))))))
+
+(defun org-markdown-preview--markdown-buffer-p ()
+  "Return non-nil when the current buffer contains Markdown content.
+
+Both `markdown-mode' and the built-in `markdown-ts-mode' are supported, as are
+modes derived from either one.  A recognized Markdown file extension is also
+accepted so preview still works before a Markdown major mode is activated."
+  (or (derived-mode-p 'markdown-mode 'markdown-ts-mode)
+      (and buffer-file-name
+           (member (downcase (or (file-name-extension buffer-file-name) ""))
+                   org-markdown-preview--markdown-file-extensions))))
+
+(defun org-markdown-preview--supported-buffer-p ()
+  "Return non-nil when the current buffer can be previewed."
+  (or (org-markdown-preview--org-buffer-p)
+      (org-markdown-preview--markdown-buffer-p)))
+
 (defun org-markdown-preview-strip-propererties ()
   "Remove selected Org property drawers from the current buffer."
   (save-excursion
@@ -352,10 +381,7 @@ Pandoc otherwise converts `emacs-lisp' to `commonlisp' in Markdown output."
 
 (defun org-markdown-preview--refresh-buffer-0 ()
   "Convert the current buffer to Markdown and cache the result."
-  (cond ((or (derived-mode-p 'org-mode)
-             (and buffer-file-name
-                  (equal "org" (file-name-extension
-                                buffer-file-name))))
+  (cond ((org-markdown-preview--org-buffer-p)
          (setq org-markdown-preview-md-content
                (org-markdown-preview-pandoc-from-string
                 (buffer-substring-no-properties
@@ -363,7 +389,7 @@ Pandoc otherwise converts `emacs-lisp' to `commonlisp' in Markdown output."
                  (point-max))
                 "org"
                 org-markdown-preview-pandoc-output-type)))
-        (t
+        ((org-markdown-preview--markdown-buffer-p)
          (setq org-markdown-preview-md-content
                (let ((content (buffer-substring-no-properties
                                (point-min)
@@ -374,7 +400,11 @@ Pandoc otherwise converts `emacs-lisp' to `commonlisp' in Markdown output."
                        (run-hooks
                         'org-markdown-preview-post-process-md-content-hook)
                        (buffer-string))
-                   content))))))
+                   content))))
+        (t
+         (user-error
+          "org-markdown-preview: `%s' is not an Org or Markdown buffer"
+          major-mode))))
 
 
 (defun org-markdown-preview--str-replace (old new s)
@@ -833,16 +863,23 @@ Scroll hooks are installed only when
   "Preview the current Org or Markdown buffer in a web browser.
 
 The mode starts a local HTTP server, opens the preview page, and keeps the
-rendered HTML in sync over WebSockets. Org buffers are converted to Markdown
-with Pandoc before rendering. Markdown buffers are rendered directly.
+rendered HTML in sync over WebSockets.  Org buffers are converted to Markdown
+with Pandoc before rendering.  `markdown-mode', `markdown-ts-mode', and their
+derived modes are rendered directly.
 
 When `org-markdown-preview-use-github-api' is non-nil, HTML is rendered through
-GitHub's Markdown API. Otherwise, the package renders HTML locally with Pandoc.
+GitHub's Markdown API.  Otherwise, the package renders HTML locally with Pandoc.
 
 Disabling the mode stops the server, closes WebSocket connections, and removes
 all buffer-local hooks and timers created for the preview session."
   :keymap org-markdown-preview-mode-map
   :global nil
+  (when (and org-markdown-preview-mode
+             (not (org-markdown-preview--supported-buffer-p)))
+    (setq org-markdown-preview-mode nil)
+    (user-error
+     "org-markdown-preview: `%s' is not an Org or Markdown buffer"
+     major-mode))
   (when (and (buffer-live-p org-markdown-preview--preview-buffer)
              (not (eq (current-buffer) org-markdown-preview--preview-buffer))
              (buffer-local-value 'org-markdown-preview-mode
