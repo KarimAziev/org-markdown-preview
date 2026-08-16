@@ -20,7 +20,6 @@ jobs:
       fail-fast: false
       matrix:
         emacs-version:
-          - "28.1"
           - "29.4"
           - "30.2"
 
