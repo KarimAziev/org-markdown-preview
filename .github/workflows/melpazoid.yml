@@ -6,11 +6,16 @@
 name: melpazoid
 on: [push, pull_request]
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v7
+      with:
+        persist-credentials: false
     - name: Set up Python
       uses: actions/setup-python@v7
       with: { python-version: '3.10' }
@@ -27,4 +32,4 @@ jobs:
         WARN_IS_ERROR: false
         # set this to false (or remove it) if the package isn't on MELPA:
         EXIST_OK: false
-      run: echo $GITHUB_REF && make -C ~/melpazoid
+      run: echo "$GITHUB_REF" && make -C ~/melpazoid

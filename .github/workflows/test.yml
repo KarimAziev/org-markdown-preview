@@ -1,0 +1,72 @@
+name: Test
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Emacs ${{ matrix.emacs-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        emacs-version:
+          - "28.1"
+          - "29.4"
+          - "30.2"
+
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Emacs
+        uses: purcell/setup-emacs@v8.0
+        with:
+          version: ${{ matrix.emacs-version }}
+
+      - name: Install package dependencies
+        run: |
+          emacs -Q --batch \
+            --eval "(progn
+              (require 'package)
+              (setq package-archives
+                    '((\"gnu\" . \"https://elpa.gnu.org/packages/\")
+                      (\"melpa\" . \"https://melpa.org/packages/\")))
+              (package-initialize)
+              (package-refresh-contents)
+              (dolist (dependency '(simple-httpd websocket))
+                (unless (package-installed-p dependency)
+                  (package-install dependency))))"
+
+      - name: Byte-compile without warnings
+        run: |
+          emacs -Q --batch \
+            --eval "(progn
+              (require 'package)
+              (package-initialize)
+              (setq byte-compile-error-on-warn t))" \
+            -L . \
+            -f batch-byte-compile \
+            org-markdown-preview.el
+
+      - name: Run ERT tests
+        run: |
+          emacs -Q --batch \
+            --eval "(progn
+              (require 'package)
+              (package-initialize))" \
+            -L . \
+            -L test \
+            -l org-markdown-preview-test \
+            -f ert-run-tests-batch-and-exit
